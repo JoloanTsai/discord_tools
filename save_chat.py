@@ -16,9 +16,8 @@ intents.guilds = True  # 啟用伺服器 Intent
 
 
 
-def bot_init():
+def get_tum_num(chat_history_save_path = CHAT_FOLD) -> dict:
     # check chat_history/tem_num.json 有沒有存在
-    global tem_num
     save_fold = chat_history_save_path
     try :
         with open(os.path.join(save_fold, 'tem_num.json'), 'r') as json_file:
@@ -29,20 +28,20 @@ def bot_init():
             json_file.write("{}")
         tem_num = {}
 
-def save_tem_num():
+    return tem_num
+
+def save_tem_num(tem_num:dict, chat_history_save_path = CHAT_FOLD):
     with open(os.path.join(chat_history_save_path, 'tem_num.json'), "w") as json_file:
         j_data = json.dumps(tem_num, indent=2, ensure_ascii=False)
         json_file.write(j_data)
 
-def get_last_id_from_tem(channel_id):
-    try:
-        last_id = tem_num[str(channel_id)]['last_id']
-    except KeyError:
-        last_id = 0
+def get_last_id_from_tem(tem_num:dict, channel_id):
+    channel_data = tem_num.get(str(channel_id), {})
+    last_id = channel_data.get('last_id', 0)
     
     return last_id
 
-def get_last_message_id_from_tem(channel_id):
+def get_last_message_id_from_tem(tem_num:dict, channel_id):
     try:
         last_message_id = tem_num[str(channel_id)]['last_message_id']
     except KeyError:
@@ -50,7 +49,9 @@ def get_last_message_id_from_tem(channel_id):
     
     return last_message_id
 
+
 async def get_channels_info_and_save(client, server_info_file_path = SERVER_INFO_FILE_PATH):
+    print('Collecting server data ...')
     server_dict = {}
     
     # 遍歷機器人所在的每個伺服器
@@ -80,32 +81,12 @@ async def get_channels_info_and_save(client, server_info_file_path = SERVER_INFO
     j_data = json.dumps(server_dict, indent=2, ensure_ascii=False)
     with open(server_info_file_path, "w") as json_file:
         json_file.write(j_data)
-
-client = commands.Bot(command_prefix = "$", intents = intents)
-
-attachment_fold = ATTACHMENT_FOLD
-chat_history_save_path = CHAT_FOLD
-server_info_file_path = SERVER_INFO_FILE_PATH
-
-
-
-tem_num = {}
-
-
-
-bot_init()
-
-import time
-
-@client.event
-async def on_ready():
-    print(f'登入身分: {client.user}')
-
-    print('Collecting server data ...')
-    await get_channels_info_and_save(client)
+    
     print('Complete collecting!')
 
-    
+async def save_chat(client, print_output_info=True):
+    tem_num = get_tum_num()
+
     try : 
         with open(server_info_file_path, 'r') as f:
             server_info_json = json.load(f)
@@ -113,20 +94,42 @@ async def on_ready():
 
     chs = get_channel_ids(server_info_json, GUILD_IDS, CHANNEL_TYPE)
 
-    start = time.time()
-
-    workers = [TextChannelInfo(client.get_channel(ch), get_last_id_from_tem(ch), get_last_message_id_from_tem(ch)) for ch in chs]
+    workers = [TextChannelInfo(client.get_channel(ch), 
+                               get_last_id_from_tem(tem_num, ch), 
+                               get_last_message_id_from_tem(tem_num, ch)) for ch in chs]
     print('正在檢查更新並搜集', str(len(workers)), '個頻道的對話...')
     tasks = [w.get_messages_and_latest_id_message_id() for w in workers]
     results = await asyncio.gather(*tasks)
+
+    log_dict = {}
 
     for ((g_id, ch_id), messages, latest_id, lastest_message_id) in results:
         chat_save_fold = os.path.join(chat_history_save_path, str(g_id))
         TextChannelInfo.save_jsonl(messages, chat_save_fold, str(ch_id) + '.jsonl')
 
+
+        # 處理終端輸出
+        if print_output_info:
+            channel_name = None
+            for ch in server_info_json[str(g_id)]['channels']:
+                if ch['channel_id'] == ch_id:
+                    channel_name = ch['channel_name']
+                    break
+
+            ld = log_dict.setdefault(g_id, {})
+            ld[ch_id] = {
+                'channel_name':channel_name,
+                # 'guild_name':server_info_json[str(g_id)]['guild_name'],
+                'how_many_new_message':latest_id - get_last_id_from_tem(tem_num, ch_id)
+            }
+
+
+
+        # update tem_num.josn
         d = tem_num.setdefault(str(ch_id), {})
         d['last_id'] = latest_id
         d['last_message_id'] = lastest_message_id
+
 
     # for coro in asyncio.as_completed(tasks):
     #     ((g_id, ch_id), messages, latest_id, lastest_message_id) = await coro
@@ -138,12 +141,48 @@ async def on_ready():
     #     d['last_message_id'] = lastest_message_id
 
 
-    save_tem_num()
+    # for guild_id in server_info_json:
+    #     guild_name = server_info_json[str(guild_id)]['guild_name']
 
-    print(f"excute time : {str(time.time() - start)} s")
+    #     channels = server_info_json[str(guild_id)]['channels']
+    #     for channel in channels:
+    #         channel_name = channel['channel_name']
+
+    if print_output_info:
+        terminal_output = ""
+        for g_id in log_dict:
+            terminal_output += f"\n{server_info_json[str(g_id)]['guild_name']}:\n------------------------------------------\n"
+            for ch_id in log_dict[g_id]:
+                terminal_output += f"   {str(log_dict[g_id][ch_id]['channel_name'])}: 頻道中有 {str(log_dict[g_id][ch_id]['how_many_new_message'])} 則新訊息 \n"
+
+        print(terminal_output)
+
+    save_tem_num(tem_num)
+    print("資料已儲存.")
+
+client = commands.Bot(command_prefix = "$", intents = intents)
+
+attachment_fold = ATTACHMENT_FOLD
+chat_history_save_path = CHAT_FOLD
+server_info_file_path = SERVER_INFO_FILE_PATH
+
+
+
+
+
+import time
+
+@client.event
+async def on_ready():
+    print(f'登入身分: {client.user}')
+
+    await get_channels_info_and_save(client)
+    await save_chat(client)
     
     await client.close()
 
-
-client.run(DISCORD_BOT_TOKEN)
+if __name__ == '__main__':
+    start = time.time()
+    client.run(DISCORD_BOT_TOKEN)
+    print(f"excute time : {str(time.time() - start)} s")
 

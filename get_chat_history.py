@@ -38,8 +38,8 @@ class TextChannelInfo():
         self.messages, self.latest_id, self.lastest_message_id = await self._get_chat_message()
         return (self.guild_id, self.channel_id), self.messages, self.latest_id, self.lastest_message_id
 
-    async def get_messages(self) -> dict:
-        return self.messages
+    # async def get_messages(self) -> dict:
+    #     return self.messages
     
     async def get_latest_id_and_message_id(self) -> tuple[int, int]:
         return self.latest_id, self.lastest_message_id
@@ -48,10 +48,14 @@ class TextChannelInfo():
         '''
         
         '''
-        (messages, latest_id), lastest_message_id = await asyncio.gather(
-            self.get_messages(self.channel, last_id = self.last_id, last_message_id = self.last_message_id, atacchment_save_path = self.attachment_save_path),
-            self.get_lastest_message_id(self.channel)
-                )
+        # (messages, latest_id), lastest_message_id = await asyncio.gather(
+        #     self.get_messages(self.channel, last_id = self.last_id, last_message_id = self.last_message_id, atacchment_save_path = self.attachment_save_path),
+        #     self.get_lastest_message_id(self.channel)
+        #         )
+        
+        messages, latest_id, lastest_message_id = await self.get_messages_and_latest_message_id(
+            self.channel, last_id = self.last_id, last_message_id = self.last_message_id, 
+            atacchment_save_path = self.attachment_save_path)
         return messages, latest_id, lastest_message_id
 
     async def extract_message_data(self, message:discord.Message, id, atacchment_save_path):
@@ -84,6 +88,31 @@ class TextChannelInfo():
             }
 
         return message_data
+    
+    async def get_messages_and_latest_message_id(self, channel, last_id, last_message_id, atacchment_save_path) -> tuple[list[dict], int, int]:
+        messages = []
+        id = last_id
+        if last_message_id:
+            async for msg in channel.history(limit= MESSAGES_LIMIT, after = discord.Object(id=last_message_id), oldest_first=True):
+                id += 1
+                message_data = await self.extract_message_data(msg, id, atacchment_save_path)
+                messages.append(message_data)
+                # print('e')
+
+        else:
+            async for msg in channel.history(limit= MESSAGES_LIMIT, oldest_first=True):
+                id+=1
+                message_data = await self.extract_message_data(msg, id, atacchment_save_path)
+                messages.append(message_data)
+                # print('a')
+
+        latest_id = id
+        # print(messages)
+        if messages:
+            latest_message_id = messages[-1]['message_id']
+        else : latest_message_id = last_message_id
+        # print(latest_id)
+        return messages, latest_id, latest_message_id
 
     async def get_messages(self, channel, last_id, last_message_id, atacchment_save_path) -> list[dict]:
         messages = []
@@ -116,14 +145,16 @@ class TextChannelInfo():
 
     @staticmethod
     def save_jsonl(json_dict:list, save_fold:str, file_name:str):
-        for j_dict in json_dict:
-            j_data = json.dumps(j_dict, ensure_ascii=False)
-            try:
-                with open(os.path.join(save_fold, file_name), "a") as json_file:
+        try:
+            with open(os.path.join(save_fold, file_name), "a") as json_file:
+                for j_dict in json_dict:
+                    j_data = json.dumps(j_dict, ensure_ascii=False)
                     json_file.write(j_data + '\n')
-            except FileNotFoundError:
-                makedirs(save_fold, exist_ok=True)
-                with open(os.path.join(save_fold, file_name), "a") as json_file:
+        except FileNotFoundError:
+            makedirs(save_fold, exist_ok=True)
+            with open(os.path.join(save_fold, file_name), "a") as json_file:
+                for j_dict in json_dict:
+                    j_data = json.dumps(j_dict, ensure_ascii=False)
                     json_file.write(j_data + '\n')
 
     def _save_json(self, json_dict:dict|list, save_fold:str, file_name:str):
