@@ -19,7 +19,7 @@ class TextChannelInfo():
         last_message_id : 對話紀錄JSONL的最後一筆對話的 message_id
         attachment_save_path : 附件的儲存路徑
         '''
-        if not isinstance(text_channel, discord.TextChannel):
+        if not isinstance(text_channel, (discord.TextChannel, discord.Thread)):
             raise NotTextChannelError("Channel 的輸入必須是TextChannel!!!")
 
         self.channel = text_channel
@@ -75,8 +75,9 @@ class TextChannelInfo():
                 'message' : message.content,
                 'message_id' : message.id,
                 'attachment_urls' : attachment_urls,
+                'date' : str(message.created_at),
                 'author_id' : message.author.id,
-                'author_name' : message.author.global_name,
+                'author_name' : message.author.global_name or message.author.name,
                 'mentions' : [{
                                 "id": m.id,
                                 "name": m.name,
@@ -84,6 +85,7 @@ class TextChannelInfo():
                                 # "nick": m.nick,
                                 }
                                 for m in message.mentions]  if message.mentions else None,
+                'replied_message' : message.reference.resolved.content if message.reference and message.reference.resolved else None,
                 'replied_message_id' : message.reference.message_id if message.reference else None,
             }
 

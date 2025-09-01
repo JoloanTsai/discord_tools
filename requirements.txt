@@ -1,2 +1,4 @@
 discord==2.3.2
-graphrag==2.5.0
+chromadb==1.0.20
+openai==1.102.0
+langchain-text-splitters==0.3.9

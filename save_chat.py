@@ -76,6 +76,18 @@ async def get_channels_info_and_save(client, server_info_file_path = SERVER_INFO
 
             print(f"頻道名稱: {channel.name} | ID: {channel.id} | 類型: {channel.type}")
 
+            if isinstance(channel, discord.TextChannel):
+                threads = channel.threads
+                for thread in threads:
+                    thread_dict = {'channel_name' : thread.name, 
+                            'channel_id' : thread.id, 
+                            'channel_type' : str(thread.type), 
+                            'category_name': channel.name,
+                            'category_id': channel.id}
+                    guild_dict['channels'].append(thread_dict) 
+
+                    print(f"    thread: {thread.name} (ID: {thread.id})")
+
         server_dict[guild.id] = guild_dict
     
     j_data = json.dumps(server_dict, indent=2, ensure_ascii=False)
@@ -125,10 +137,11 @@ async def save_chat(client, print_output_info=True):
 
 
 
-        # update tem_num.josn
+        # update tem_num.json
         d = tem_num.setdefault(str(ch_id), {})
         d['last_id'] = latest_id
         d['last_message_id'] = lastest_message_id
+        d['guild_id'] = g_id
 
 
     # for coro in asyncio.as_completed(tasks):
