@@ -1,34 +1,13 @@
-'''
-開機時check chat_history/tem_num.json 有沒有存在
-last_id, last_message_id
-
-考慮改用JSONL存聊天記錄
-'''
-
 import discord
 import json, os
 import asyncio
 from discord.ext import commands
 from env_settings import *
-from get_chat_history import TextChannelInfo, get_channel_ids
+from get_chat_history import TextChannelInfo, get_channel_ids, get_tum_num
 intents = discord.Intents.default()
 intents.guilds = True  # 啟用伺服器 Intent
 
 
-
-def get_tum_num(chat_history_save_path = CHAT_FOLD) -> dict:
-    # check chat_history/tem_num.json 有沒有存在
-    save_fold = chat_history_save_path
-    try :
-        with open(os.path.join(save_fold, 'tem_num.json'), 'r') as json_file:
-            tem_num = json.load(json_file)
-    except FileNotFoundError:
-        os.makedirs(save_fold, exist_ok=True)
-        with open(os.path.join(save_fold, 'tem_num.json'), 'w') as json_file:
-            json_file.write("{}")
-        tem_num = {}
-
-    return tem_num
 
 def save_tem_num(tem_num:dict, chat_history_save_path = CHAT_FOLD):
     with open(os.path.join(chat_history_save_path, 'tem_num.json'), "w") as json_file:
@@ -108,7 +87,8 @@ async def save_chat(client, print_output_info=True):
 
     workers = [TextChannelInfo(client.get_channel(ch), 
                                get_last_id_from_tem(tem_num, ch), 
-                               get_last_message_id_from_tem(tem_num, ch)) for ch in chs]
+                               get_last_message_id_from_tem(tem_num, ch),
+                               client.user) for ch in chs]
     print('正在檢查更新並搜集', str(len(workers)), '個頻道的對話...')
     tasks = [w.get_messages_and_latest_id_message_id() for w in workers]
     results = await asyncio.gather(*tasks)

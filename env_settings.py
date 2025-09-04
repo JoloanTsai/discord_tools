@@ -1,11 +1,17 @@
 from collections.abc import Iterable
-import os
+from pathlib import Path
 
+current_file = Path(__file__).resolve()
+PROJECT_ROOT = current_file.parent
 # Save Path
 ATTACHMENT_FOLD = 'atacchments'
 CHAT_FOLD = 'chat_history'
 SERVER_INFO_FILE_PATH = 'server_info.json'
 CHANNEL_TYPE : Iterable|str|None = {'text', 'news_thread', 'public_thread', 'private_thread'} # 篩選想要儲存的頻道類型
+CHROMA_CLIENT_PATH = PROJECT_ROOT / 'rag/chroma'
+DEFAULT_COLLECTION_NAME = 'dc_chat'
+
+ROLE_PROMPT_PATH = None
 
 # 可調
 GUILD_IDS : Iterable|int|str|None = None  # 輸入指定的伺服器 ID(s)，只會收集這些伺服器的頻道，None 為全部

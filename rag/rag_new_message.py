@@ -7,7 +7,6 @@ import json
 import chromadb
 from openai import OpenAI
 from env_settings import *
-from config import *
 from ai_manager import EmbeddingClient, EmbeddingClientPool
 from itertools import islice
 from chromadb.utils.embedding_functions import EmbeddingFunction
@@ -66,7 +65,8 @@ def get_contents_from_chat() -> list[tuple[str, str]]:
         with open(f"../{CHAT_FOLD}/{str(dc_tem[ch_id]['guild_id'])}/{ch_id}.jsonl", "r", encoding="utf-8") as f:
             obj = [json.loads(line) for line in islice(f, skip, None)]
             conts = [(f"{ch_id_save}{m['id']}", (
-                f"message:{m['message']}, send from:{m['author_name']}."
+                (f"message:{m['message']}," if m['message'] else "message: send a attachment,") 
+                + f" send from:{m['author_name']}, time:{m['date']}."
                 + (f"\nThis message is in reply to:{m['replied_message']}" if m['replied_message'] else "")
             ))
                     for m in obj]
@@ -76,7 +76,7 @@ def get_contents_from_chat() -> list[tuple[str, str]]:
         d = emb_tem.setdefault(ch_id, {})
         d['last_id'] = dc_tem[ch_id]['last_id']
 
-    save_tem_num(emb_tem, "embeddings")
+    save_tem_num(emb_tem, PROJECT_ROOT/"rag/embeddings")
     
     return contents
 
@@ -165,6 +165,8 @@ class GeminiEmbeddingFunction(EmbeddingFunction):
 gemini_ef = GeminiEmbeddingFunction(client, EMBEDDING_MODEL, EMBEDDING_DIMENSION)
 
 
+
+
 def add_vectors_in_chroma(contents:list[tuple[str, str, list]], collection_name:str, embedding_function = None):
     '''
     將ids, documents, embeddings 加進 chroma 資料庫
@@ -175,7 +177,7 @@ def add_vectors_in_chroma(contents:list[tuple[str, str, list]], collection_name:
     except chromadb.errors.NotFoundError:
         collection = chroma_client.create_collection(name=collection_name, embedding_function=embedding_function)
         
-    collection.add(
+    collection.upsert(
         ids=[cont[0] for cont in contents],
         documents=[cont[1] for cont in contents],
         embeddings=[cont[2] for cont in contents],
@@ -185,7 +187,9 @@ def add_vectors_in_chroma(contents:list[tuple[str, str, list]], collection_name:
 
 async def rag_new_message():
     contents = get_contents_from_chat()
+
     if contents:
+        print(f"正在處理 {len(contents)} 條新訊息...")
         batched_contents = cut_list_by_batch(contents, EMBEDDING_RPM)
 
         # for x in contents:
