@@ -124,34 +124,7 @@ class EmbeddingClientPool():
 
 
 
-class Machine:
-    def __init__(self, name):
-        self.name = name
 
-    async def run(self, task_id):
-        print(f"{self.name} 開始處理任務 {task_id}")
-        await asyncio.sleep(random.uniform(1, 3))  # 模擬IO
-        print(f"{self.name} 完成任務 {task_id}")
-
-
-class MachinePool:
-    def __init__(self, machines):
-        self._queue = asyncio.Queue()
-        for m in machines:
-            self._queue.put_nowait(m)
-
-    async def acquire(self):
-        """等到有閒置機器，取出"""
-        return await self._queue.get()
-
-    def release(self, machine):
-        """釋放機器"""
-        self._queue.put_nowait(machine)
-
-
-# -------------------------
-# 模擬「分散調用」的程式碼
-# -------------------------
 async def pool_ai_invoke(pool, message):
     machine = await pool.acquire()
     # return await machine.invoke(message)
@@ -168,29 +141,6 @@ async def pool_ai_invoke(pool, message):
     # finally:
     #     pool.release(machine)
 
-async def do_task(pool, task_id):
-    machine = await pool.acquire()
-    try:
-        await machine.run(task_id)
-    finally:
-        pool.release(machine)
-
-
-async def main():
-    pool = MachinePool([Machine(f"機器{i}") for i in range(3)])
-
-    # 任務在不同時間/程式位置出現
-    asyncio.create_task(do_task(pool, 1))
-    await asyncio.sleep(0.2)
-    asyncio.create_task(do_task(pool, 2))
-    await asyncio.sleep(0.2)
-    asyncio.create_task(do_task(pool, 3))
-    await asyncio.sleep(0.2)
-    asyncio.create_task(do_task(pool, 4))
-    asyncio.create_task(do_task(pool, 5))
-
-    # 為了等全部完成
-    await asyncio.sleep(10)
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    pass
