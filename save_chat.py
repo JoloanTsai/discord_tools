@@ -35,7 +35,7 @@ async def get_channels_info_and_save(client, server_info_file_path = SERVER_INFO
     
     # 遍歷機器人所在的每個伺服器
     for guild in client.guilds:
-        guild_dict = {'guild_name': guild.name, 'guild_id': guild.id, 'channels' : []}
+        guild_dict = {'guild_name': guild.name, 'guild_id': guild.id, 'channels' : {}}
 
         print(f"--- 伺服器: {guild.name} (ID: {guild.id}) ---")
         
@@ -51,7 +51,7 @@ async def get_channels_info_and_save(client, server_info_file_path = SERVER_INFO
                     'category_name': category_name,
                     'category_id': category_id}
             
-            guild_dict['channels'].append(ch_dict)
+            guild_dict['channels'][str(channel.id)]=ch_dict
 
             print(f"頻道名稱: {channel.name} | ID: {channel.id} | 類型: {channel.type}")
 
@@ -63,7 +63,7 @@ async def get_channels_info_and_save(client, server_info_file_path = SERVER_INFO
                             'channel_type' : str(thread.type), 
                             'category_name': channel.name,
                             'category_id': channel.id}
-                    guild_dict['channels'].append(thread_dict) 
+                    guild_dict['channels'][str(thread.id)]=thread_dict
 
                     print(f"    thread: {thread.name} (ID: {thread.id})")
 
@@ -103,9 +103,9 @@ async def save_chat(client, print_output_info=True):
         # 處理終端輸出
         if print_output_info:
             channel_name = None
-            for ch in server_info_json[str(g_id)]['channels']:
-                if ch['channel_id'] == ch_id:
-                    channel_name = ch['channel_name']
+            for ch_info in server_info_json[str(g_id)]['channels'].values():
+                if ch_info['channel_id'] == ch_id:
+                    channel_name = ch_info['channel_name']
                     break
 
             ld = log_dict.setdefault(g_id, {})

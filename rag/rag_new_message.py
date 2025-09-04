@@ -44,13 +44,13 @@ def get_contents_from_chat() -> list[tuple[str, str]]:
     查看哪些是還沒被加進向量資料庫的內容，輸出 contents，並更新 embedding/tem_num.json
     '''
 
-    dc_tem = get_tum_num(f"../{CHAT_FOLD}")
-    emb_tem = get_tum_num("embeddings")
+    dc_tem = get_tum_num(CHAT_FOLD)
+    emb_tem = get_tum_num(PROJECT_ROOT/"rag/embeddings")
 
     contents :list[tuple[str, str]] = []
 
     for ch_id in dc_tem:
-        ch_id_save = ch_id+'_'
+        ch_id_save = str(dc_tem[ch_id]["guild_id"]) + '_'+ch_id+'_'
 
 
         if ch_id not in emb_tem:
@@ -62,7 +62,7 @@ def get_contents_from_chat() -> list[tuple[str, str]]:
         if new_message == 0 : continue
 
         skip = emb_tem[ch_id]['last_id']
-        with open(f"../{CHAT_FOLD}/{str(dc_tem[ch_id]['guild_id'])}/{ch_id}.jsonl", "r", encoding="utf-8") as f:
+        with open(f"{CHAT_FOLD}/{str(dc_tem[ch_id]['guild_id'])}/{ch_id}.jsonl", "r", encoding="utf-8") as f:
             obj = [json.loads(line) for line in islice(f, skip, None)]
             conts = [(f"{ch_id_save}{m['id']}", (
                 (f"message:{m['message']}," if m['message'] else "message: send a attachment,") 
@@ -207,7 +207,7 @@ async def rag_new_message():
         pool = EmbeddingClientPool(workers)
         results:list[tuple[str, str, list]] = await process_tasks(pool, q) # list[tuple[id, doc, embedding]]
 
-        add_vectors_in_chroma(results, CHROMA_COLLECTION_NAME)
+        add_vectors_in_chroma(results, DEFAULT_COLLECTION_NAME)
     
     else : print("Has no more new data need to rag")
 

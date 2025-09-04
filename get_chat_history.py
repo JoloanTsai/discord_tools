@@ -219,16 +219,18 @@ def get_channel_ids(server_info_json:dict, select_guilds:Iterable|int|str|None =
         if not select_ch_type.issubset(channel_types) :
             raise ChannelTypeError(f"select_ch_type 的輸入必須是 discord 官方的 channel type ： \n {channel_types}")
         
-        channel_ids = [ch['channel_id'] for guild in guild_ids
-                                        for ch in server_info_json[str(guild)]['channels']
-                                        if ch['channel_type'] in select_ch_type]
+        
+        channel_ids = [ch_info['channel_id'] for guild in guild_ids
+                                            for ch_info in server_info_json[str(guild)]['channels'].values()
+                                            if ch_info['channel_type'] in select_ch_type
+                        ]
     else :
         # channel_ids = []
         # for guild in server_info_json:
         #     channel_ids_in_guild = [ch['channel_id'] for ch in server_info_json[guild]['channels']]
         #     channel_ids += channel_ids_in_guild
-        channel_ids = [ch['channel_id'] for guild in guild_ids
-                                        for ch in server_info_json[guild]['channels']]
+        channel_ids = [int(ch) for guild in guild_ids
+                                for ch in server_info_json[guild]['channels']]
         
     return channel_ids
 
