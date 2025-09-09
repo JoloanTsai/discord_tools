@@ -4,19 +4,36 @@ import asyncio
 from os import makedirs
 from env_settings import *
 from collections.abc import Iterable
+from datetime import datetime
+from itertools import islice
 
+def get_tum_num(chat_history_save_path = CHAT_FOLD) -> dict:
+    # check chat_history/tem_num.json 有沒有存在
+    save_fold = chat_history_save_path
+    try :
+        with open(os.path.join(save_fold, 'tem_num.json'), 'r') as json_file:
+            tem_num = json.load(json_file)
+    except FileNotFoundError:
+        os.makedirs(save_fold, exist_ok=True)
+        with open(os.path.join(save_fold, 'tem_num.json'), 'w') as json_file:
+            json_file.write("{}")
+        tem_num = {}
+
+    return tem_num
 
 class TextChannelInfo():
     '''
     
     '''
-    def __init__(self, text_channel, last_id, last_message_id, 
+    def __init__(self, text_channel, last_id, last_message_id,
+                 client_user, 
                  attachment_fold = ATTACHMENT_FOLD, 
                  chat_history_save_path = CHAT_FOLD):
         '''
         channel : 使用discord.Client.get_channel()的到的channel資訊
         last_id : 之前對話紀錄JSONL的最後一筆id
         last_message_id : 對話紀錄JSONL的最後一筆對話的 message_id
+        client_user : 輸入client.user 避免存入機器人自己的訊息
         attachment_save_path : 附件的儲存路徑
         '''
         if not isinstance(text_channel, (discord.TextChannel, discord.Thread)):
@@ -29,34 +46,36 @@ class TextChannelInfo():
         self.channel_id = text_channel.id
         self.attachment_save_path = os.path.join(attachment_fold, str(self.guild_id), str(self.channel_id))
         self.chat_save_fold = os.path.join(chat_history_save_path, str(self.guild_id))
+        self.client_user = client_user
 
 
     async def get_messages_and_latest_id_message_id(self) -> tuple[tuple[int, int], list, int, int]:
         '''
         輸出：(guild_id, channel_id), messages, latest_id, lastest_message_id
         '''
-        self.messages, self.latest_id, self.lastest_message_id = await self._get_chat_message()
+
+        self.messages, self.latest_id, self.lastest_message_id = await self.get_messages_and_latest_message_id(
+            self.channel, last_id = self.last_id, last_message_id = self.last_message_id, 
+            atacchment_save_path = self.attachment_save_path)
         return (self.guild_id, self.channel_id), self.messages, self.latest_id, self.lastest_message_id
 
-    # async def get_messages(self) -> dict:
-    #     return self.messages
     
     async def get_latest_id_and_message_id(self) -> tuple[int, int]:
         return self.latest_id, self.lastest_message_id
 
-    async def _get_chat_message(self) -> tuple[list, int, int]:
-        '''
+    # async def _get_chat_message(self) -> tuple[list, int, int]:
+    #     '''
         
-        '''
-        # (messages, latest_id), lastest_message_id = await asyncio.gather(
-        #     self.get_messages(self.channel, last_id = self.last_id, last_message_id = self.last_message_id, atacchment_save_path = self.attachment_save_path),
-        #     self.get_lastest_message_id(self.channel)
-        #         )
+    #     '''
+    #     # (messages, latest_id), lastest_message_id = await asyncio.gather(
+    #     #     self.get_messages(self.channel, last_id = self.last_id, last_message_id = self.last_message_id, atacchment_save_path = self.attachment_save_path),
+    #     #     self.get_lastest_message_id(self.channel)
+    #     #         )
         
-        messages, latest_id, lastest_message_id = await self.get_messages_and_latest_message_id(
-            self.channel, last_id = self.last_id, last_message_id = self.last_message_id, 
-            atacchment_save_path = self.attachment_save_path)
-        return messages, latest_id, lastest_message_id
+    #     messages, latest_id, lastest_message_id = await self.get_messages_and_latest_message_id(
+    #         self.channel, last_id = self.last_id, last_message_id = self.last_message_id, 
+    #         atacchment_save_path = self.attachment_save_path)
+    #     return messages, latest_id, lastest_message_id
 
     async def extract_message_data(self, message:discord.Message, id, atacchment_save_path):
         attachment_urls = []
@@ -96,6 +115,7 @@ class TextChannelInfo():
         id = last_id
         if last_message_id:
             async for msg in channel.history(limit= MESSAGES_LIMIT, after = discord.Object(id=last_message_id), oldest_first=True):
+                if msg.author == self.client_user: continue # Avoid save BOT self message
                 id += 1
                 message_data = await self.extract_message_data(msg, id, atacchment_save_path)
                 messages.append(message_data)
@@ -103,6 +123,7 @@ class TextChannelInfo():
 
         else:
             async for msg in channel.history(limit= MESSAGES_LIMIT, oldest_first=True):
+                if msg.author == self.client_user: continue
                 id+=1
                 message_data = await self.extract_message_data(msg, id, atacchment_save_path)
                 messages.append(message_data)
@@ -198,18 +219,38 @@ def get_channel_ids(server_info_json:dict, select_guilds:Iterable|int|str|None =
         if not select_ch_type.issubset(channel_types) :
             raise ChannelTypeError(f"select_ch_type 的輸入必須是 discord 官方的 channel type ： \n {channel_types}")
         
-        channel_ids = [ch['channel_id'] for guild in guild_ids
-                                        for ch in server_info_json[str(guild)]['channels']
-                                        if ch['channel_type'] in select_ch_type]
+        
+        channel_ids = [ch_info['channel_id'] for guild in guild_ids
+                                            for ch_info in server_info_json[str(guild)]['channels'].values()
+                                            if ch_info['channel_type'] in select_ch_type
+                        ]
     else :
         # channel_ids = []
         # for guild in server_info_json:
         #     channel_ids_in_guild = [ch['channel_id'] for ch in server_info_json[guild]['channels']]
         #     channel_ids += channel_ids_in_guild
-        channel_ids = [ch['channel_id'] for guild in guild_ids
-                                        for ch in server_info_json[guild]['channels']]
+        channel_ids = [int(ch) for guild in guild_ids
+                                for ch in server_info_json[guild]['channels']]
         
     return channel_ids
+
+
+def get_date_messages(ch_id:str, select_date:datetime.date = datetime.now().date(),
+                        max_outputs:int = 100) -> list[dict]:
+    '''
+    回傳該頻道指定日期的 messages，messages 格式與 caht history 一樣
+    '''
+    dc_tem = get_tum_num()
+    g_id = str(dc_tem[ch_id]['guild_id'])
+    last_id = dc_tem[ch_id]['last_id']
+
+    skip = last_id-max_outputs if last_id >= max_outputs else None
+
+    with open(f"{CHAT_FOLD}/{g_id}/{ch_id}.jsonl", "r", encoding="utf-8") as f:
+        obj = [json.loads(line) for line in islice(f, skip, None)]
+
+    obj = [item for item in obj if datetime.fromisoformat(item['date']).date() == select_date]
+    return obj
 
 
 class ChannelTypeError(Exception):

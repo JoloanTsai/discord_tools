@@ -7,8 +7,8 @@ import json
 import chromadb
 from openai import OpenAI
 from env_settings import *
-from config import *
 from ai_manager import EmbeddingClient, EmbeddingClientPool
+from save_chat import get_server_info_json
 from itertools import islice
 from chromadb.utils.embedding_functions import EmbeddingFunction
 
@@ -41,17 +41,18 @@ def get_last_id_from_tem(tem_num:dict, channel_id):
 
 def get_contents_from_chat() -> list[tuple[str, str]]:
     '''
+    不分 guild，會全部拿出
     使用embedding 資料夾內的 tem_num.json 比較 chat_fold 內的 tem_num.json，
     查看哪些是還沒被加進向量資料庫的內容，輸出 contents，並更新 embedding/tem_num.json
     '''
 
-    dc_tem = get_tum_num(f"../{CHAT_FOLD}")
-    emb_tem = get_tum_num("embeddings")
+    dc_tem = get_tum_num(CHAT_FOLD)
+    emb_tem = get_tum_num(PROJECT_ROOT/"rag/embeddings")
 
     contents :list[tuple[str, str]] = []
 
     for ch_id in dc_tem:
-        ch_id_save = ch_id+'_'
+        ch_id_save = str(dc_tem[ch_id]["guild_id"]) + '_'+ch_id+'_'
 
 
         if ch_id not in emb_tem:
@@ -63,10 +64,11 @@ def get_contents_from_chat() -> list[tuple[str, str]]:
         if new_message == 0 : continue
 
         skip = emb_tem[ch_id]['last_id']
-        with open(f"../{CHAT_FOLD}/{str(dc_tem[ch_id]['guild_id'])}/{ch_id}.jsonl", "r", encoding="utf-8") as f:
+        with open(f"{CHAT_FOLD}/{str(dc_tem[ch_id]['guild_id'])}/{ch_id}.jsonl", "r", encoding="utf-8") as f:
             obj = [json.loads(line) for line in islice(f, skip, None)]
             conts = [(f"{ch_id_save}{m['id']}", (
-                f"message:{m['message']}, send from:{m['author_name']}."
+                (f"message:{m['message']}," if m['message'] else "message: send a attachment,") 
+                + f" send from:{m['author_name']}, time:{m['date']}."
                 + (f"\nThis message is in reply to:{m['replied_message']}" if m['replied_message'] else "")
             ))
                     for m in obj]
@@ -76,11 +78,53 @@ def get_contents_from_chat() -> list[tuple[str, str]]:
         d = emb_tem.setdefault(ch_id, {})
         d['last_id'] = dc_tem[ch_id]['last_id']
 
-    save_tem_num(emb_tem, "embeddings")
+    save_tem_num(emb_tem, PROJECT_ROOT/"rag/embeddings")
     
     return contents
 
+def get_contents_from_guild(guild_id:int) -> list[tuple[str, str]]:
+    '''
+    指定 guild
+    使用embedding 資料夾內的 tem_num.json 比較 chat_fold 內的 tem_num.json，
+    查看哪些是還沒被加進向量資料庫的內容，輸出 contents，並更新 embedding/tem_num.json
+    '''
 
+    dc_tem = get_tum_num(CHAT_FOLD)
+    emb_tem = get_tum_num(PROJECT_ROOT/"rag/embeddings")
+    g_id = str(guild_id)
+
+    contents :list[tuple[str, str]] = []
+
+    for ch_id in dc_tem:
+        if dc_tem[ch_id]['guild_id'] != guild_id : continue
+        ch_id_save = g_id + '_'+ch_id+'_'
+
+        if ch_id not in emb_tem:
+            d = emb_tem.setdefault(ch_id, {})
+            d['last_id'] = 0
+
+
+        new_message = dc_tem[ch_id]['last_id'] - emb_tem[ch_id]['last_id']
+        if new_message == 0 : continue
+
+        skip = emb_tem[ch_id]['last_id']
+        with open(f"{CHAT_FOLD}/{g_id}/{ch_id}.jsonl", "r", encoding="utf-8") as f:
+            obj = [json.loads(line) for line in islice(f, skip, None)]
+            conts = [(f"{ch_id_save}{m['id']}", (
+                (f"message:{m['message']}," if m['message'] else "message: send a attachment,") 
+                + f" send from:{m['author_name']}, time:{m['date']}."
+                + (f"\nThis message is in reply to:{m['replied_message']}" if m['replied_message'] else "")
+            ))
+                    for m in obj]
+            
+        contents += conts
+
+        d = emb_tem.setdefault(ch_id, {})
+        d['last_id'] = dc_tem[ch_id]['last_id']
+
+    save_tem_num(emb_tem, PROJECT_ROOT/"rag/embeddings")
+    
+    return contents
 
 async def process_tasks(pool: EmbeddingClientPool, task_queue: asyncio.Queue):
     """從任務隊列取任務，用空閒的客戶端處理"""
@@ -165,17 +209,19 @@ class GeminiEmbeddingFunction(EmbeddingFunction):
 gemini_ef = GeminiEmbeddingFunction(client, EMBEDDING_MODEL, EMBEDDING_DIMENSION)
 
 
+
+
 def add_vectors_in_chroma(contents:list[tuple[str, str, list]], collection_name:str, embedding_function = None):
     '''
     將ids, documents, embeddings 加進 chroma 資料庫
     '''
-    chroma_client = chromadb.PersistentClient()
+    chroma_client = chromadb.PersistentClient(CHROMA_CLIENT_PATH)
     try:
         collection = chroma_client.get_collection(name=collection_name, embedding_function=embedding_function)
     except chromadb.errors.NotFoundError:
         collection = chroma_client.create_collection(name=collection_name, embedding_function=embedding_function)
         
-    collection.add(
+    collection.upsert(
         ids=[cont[0] for cont in contents],
         documents=[cont[1] for cont in contents],
         embeddings=[cont[2] for cont in contents],
@@ -185,7 +231,9 @@ def add_vectors_in_chroma(contents:list[tuple[str, str, list]], collection_name:
 
 async def rag_new_message():
     contents = get_contents_from_chat()
+
     if contents:
+        print(f"正在處理 {len(contents)} 條新訊息...")
         batched_contents = cut_list_by_batch(contents, EMBEDDING_RPM)
 
         # for x in contents:
@@ -203,7 +251,38 @@ async def rag_new_message():
         pool = EmbeddingClientPool(workers)
         results:list[tuple[str, str, list]] = await process_tasks(pool, q) # list[tuple[id, doc, embedding]]
 
-        add_vectors_in_chroma(results, CHROMA_COLLECTION_NAME)
+        add_vectors_in_chroma(results, DEFAULT_COLLECTION_NAME)
+        print("RAG complete!")
+    
+    else : print("Has no more new data need to rag")
+
+async def rag_new_message_by_guild(guild_id:int):
+    '''
+    只針對單一 guild 內的訊息去做 RAG
+    '''
+    contents = get_contents_from_guild(guild_id)
+
+    if contents:
+        print(f"正在處理 {len(contents)} 條新訊息...")
+        batched_contents = cut_list_by_batch(contents, EMBEDDING_RPM)
+
+        # for x in contents:
+        #     e = embedding(client, x[0], x[1])
+        #     print(e)
+        #     time.sleep(2)
+
+        
+        q = asyncio.Queue()
+        for x in batched_contents:
+            q.put_nowait(x)
+
+
+        workers = [EmbeddingClient(x['model_name'], x['api_key'], x['api_url']) for x in EMBEDDING_MODELS]
+        pool = EmbeddingClientPool(workers)
+        results:list[tuple[str, str, list]] = await process_tasks(pool, q) # list[tuple[id, doc, embedding]]
+
+        add_vectors_in_chroma(results, str(guild_id))
+        print("RAG complete!")
     
     else : print("Has no more new data need to rag")
 
