@@ -11,9 +11,9 @@
 ``` bash
 pip install -r requirements.txt
 ```
+<br>
 
 ### Discord Bot Token 設置
-### 修改配置文件
 需要先將你的 Discord Bot Token 設置到環境變數中：
 ```bash
 export DISCORD_BOT_TOKEN=<your_token>
@@ -22,6 +22,7 @@ export DISCORD_BOT_TOKEN=<your_token>
 
 <br>
 
+### 修改配置文件
 到 `env_settings.py` 中修改參數，填入 LLM, Embedding 模型的 API 資訊:
 
 必填：

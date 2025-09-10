@@ -1,15 +1,39 @@
 import discord
 from discord.ext import commands
 from env_settings import *
-from get_chat_history import TextChannelInfo, get_channel_ids, get_tum_num
 from ai_manager import LlmClient, LlmClientPool
 from llm_response import get_today_messages_outputs
 from save_chat import save_chat, get_channels_info_and_save
+from rag.rag_new_message import rag_new_message, rag_new_message_by_guild
+from llm_response import ChromaGeminiClient
 
-intents = discord.Intents.default()
+intents = discord.Intents.all()
 intents.guilds = True  # 啟用伺服器 Intent
 client = commands.Bot(command_prefix = "$", intents = intents)
 
+
+class ModalInputer(discord.ui.Modal, title = "text inputer"):
+    def __init__(self, prompt: str, describtion: str):
+        super().__init__()
+        self.prompt = prompt
+        self.describtion = describtion
+        self.user_input = ""
+        
+        # 創建文字輸入欄位
+        self.text_input = discord.ui.TextInput(
+            label=self.prompt,
+            placeholder=self.describtion,  # 預設提示文字
+            required=True,  # 必須填寫
+            max_length=1000  # 最大字數限制
+        )
+        
+        # 將輸入欄位添加到 Modal
+        self.add_item(self.text_input)
+
+    # Modal 提交後接著要執行的程式碼
+    async def on_submit(self, interaction: discord.Interaction):
+        self.user_input = self.text_input.value
+        await interaction.response.defer()
 
 async def pool_ai_invoke(pool, message) -> str:
     try:
@@ -24,45 +48,131 @@ llm_pool = LlmClientPool(llms)
 with open(PROJECT_ROOT / 'prompts/summary.txt') as f:
     summary_prompt = f.read()
 
+with open(PROJECT_ROOT / 'prompts/rag_ans.txt') as f:
+    rag_ans_prompt = f.read()
+
+try:
+    with open(PROJECT_ROOT / 'target_channels.txt', 'r') as file:
+        content = file.read()
+        target_channels:set = eval(content)
+except FileNotFoundError:
+    target_channels = set()
+    with open(PROJECT_ROOT / 'target_channels.txt', 'w') as file:
+        file.write('{0,}')
+
+def save_target_channels(target_channels:set):
+    content = str(target_channels)
+    with open(PROJECT_ROOT / 'target_channels.txt', 'w') as file:
+        file.write(content)
+
+
 if ROLE_PROMPT_PATH :
     with open(ROLE_PROMPT_PATH) as f:
         role_prompt = f.read()
 else: role_prompt = ''
 
 
-async def get_day_summary_text(channel_id:str):
-    await get_channels_info_and_save(client)
-    await save_chat(client, print_output_info=False)
+
+
+async def get_day_summary_text(channel_id:str, guild_id:int):
+    await get_channels_info_and_save(client, select_guild_ids=[guild_id], ignore_ch=target_channels)
+    await save_chat(client, guild_ids=guild_id, print_output_info=False)
 
     input_text = get_today_messages_outputs(channel_id)
-    messages = [
-        {"role": "system", "content": f"{role_prompt}{summary_prompt}"},
-        {
-            "role": "user",
-            "content": f"{input_text}",
-        },
-    ]
-    output_text = await pool_ai_invoke(llm_pool, messages)
+    if input_text != "Today has no message.":
+        messages = [
+            {"role": "system", "content": f"{role_prompt}{summary_prompt}"},
+            {
+                "role": "user",
+                "content": f"{input_text}",
+            },
+        ]
+        output_text = await pool_ai_invoke(llm_pool, messages)
+
+    else : output_text = input_text
+
     return output_text
+
+async def get_rag_query_text(input_text:str, guild_id:int, user_name:str):
+    await get_channels_info_and_save(client, select_guild_ids=[guild_id], ignore_ch=target_channels)
+    await save_chat(client, guild_ids=guild_id, print_output_info=False)
+    await rag_new_message_by_guild(guild_id)
+    
+    cc = ChromaGeminiClient()
+    query_output = cc.query_rag_with_width(input_text, 10, 8, collection_name=str(guild_id))
+    web_search = 'None'
+
+    # print(query_output)
+
+    messages = [
+                {"role": "system", "content": f"{role_prompt}{rag_ans_prompt}"},
+                {
+                    "role": "user",
+                    "content": f"query_output:{ {query_output} }.\n\n web_search:{ {web_search} }. \n\n，使用者({user_name})問的問題：{ {input_text} }",
+                },
+            ]
+    
+    output_text = await pool_ai_invoke(llm_pool, messages)
+
+    return output_text
+
+
+
 
 @client.event
 async def on_ready():
     print(f'登入身分: {client.user}')
     slash = await client.tree.sync()
 
-@client.tree.command(name='start', description='開始使用')
-async def start(interaction:discord.Interaction):
-    #get channel ID
-    channel_id = interaction.channel.id  # 獲取訊息所在頻道的ID
-    print("got")
-    await interaction.response.send_message('hello')
+
+@client.tree.command(name='start', description='開始在該頻道使用自動 AI 功能')
+async def start_ai(interaction:discord.Interaction):
+    channel_id = interaction.channel.id
+    target_channels.add(channel_id)
+    save_target_channels(target_channels)
+    await interaction.response.send_message('start!')
+
+@client.tree.command(name='stop', description='停止在該頻道使用自動 AI 功能')
+async def stop_ai(interaction:discord.Interaction):
+    channel_id = interaction.channel.id
+    target_channels.discard(channel_id)
+    save_target_channels(target_channels)
+    await interaction.response.send_message('stop!')
+
+@client.event
+async def on_message(message):
+    if message.author == client.user:
+        return
+
+    if message.channel.id in target_channels:
+        guild_id:int = message.guild.id
+        input_text = message.content
+        output_text = await get_rag_query_text(input_text, guild_id, message.author)
+        # output_text = input_text
+        await message.channel.send(output_text)
+
+
+
+
 
 @client.tree.command(name='day_summary', description='彙整該頻道一天的訊息')
 async def day_summary(interaction:discord.Interaction):
     channel_id = str(interaction.channel.id)  # 獲取訊息所在頻道的ID
-    output_text = await get_day_summary_text(channel_id)
+    guild_id:int = interaction.guild.id
+    output_text = await get_day_summary_text(channel_id, guild_id)
 
     await interaction.response.send_message(output_text)
+
+@client.tree.command(name='rag_query', description='從rag中提取資訊給大模型回答')
+async def rag_query(interaction:discord.Interaction):
+    guild_id:int = interaction.guild.id
+    input_modal = ModalInputer(f'輸入你想問關於這個伺服器的任何事情', '')
+    await interaction.response.send_modal(input_modal)
+    await input_modal.wait()
+    input_text = input_modal.user_input
+    output_text = await get_rag_query_text(input_text, guild_id, interaction.user)
+
+    await interaction.channel.send(output_text)
 
 
 if __name__ == '__main__':

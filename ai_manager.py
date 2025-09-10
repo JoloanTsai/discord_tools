@@ -99,7 +99,7 @@ class EmbeddingClient():
     
     async def get_id_doc_embedding(self, ids:list[str], docs:list[str]) -> list[tuple[str, str, list]]:
         embeddings = await self.embedding(docs)
-        print([(id_, doc_, emb_) for id_, doc_, emb_ in zip(ids, docs, embeddings)])
+        # print([(id_, doc_, emb_) for id_, doc_, emb_ in zip(ids, docs, embeddings)])
 
         return [(id_, doc_, emb_) for id_, doc_, emb_ in zip(ids, docs, embeddings)]
     

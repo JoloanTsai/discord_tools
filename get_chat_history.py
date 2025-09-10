@@ -249,7 +249,6 @@ def get_date_messages(ch_id:str, select_date:datetime.date = datetime.now().date
     with open(f"{CHAT_FOLD}/{g_id}/{ch_id}.jsonl", "r", encoding="utf-8") as f:
         obj = [json.loads(line) for line in islice(f, skip, None)]
 
-    print(obj)
     obj = [item for item in obj if datetime.fromisoformat(item['date']).date() == select_date]
     return obj
 
