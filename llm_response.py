@@ -292,14 +292,16 @@ def get_range_message_by_msg_width(rag_id:str, msg_width:int = 10, ignore_ch:set
     '''
     g_id, ch_id, id = rag_id.split('_')
     target = int(id)
-    if target in ignore_ch:
+    if ignore_ch and (target in ignore_ch):
+        return None
+        
+    else: 
         skip = target-msg_width if target >= msg_width else None
         stop = target+msg_width
         with open(f"{CHAT_FOLD}/{g_id}/{ch_id}.jsonl", "r", encoding="utf-8") as f:
             obj = [json.loads(line) for line in islice(f, skip, stop)]
 
         return obj
-    else: return None
 
 def reults_to_llm_input(ids:list[str], docs:list[str]) -> str:
     '''
