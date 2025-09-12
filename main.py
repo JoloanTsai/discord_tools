@@ -152,7 +152,9 @@ async def start_ai(interaction:discord.Interaction):
     save_target_channels(target_channels)
 
     cc = ChromaGeminiClient()
-    cc.delete_rag_data_by_ch_id(guild_id, channel_id)
+    try:
+        cc.delete_rag_data_by_ch_id(guild_id, channel_id)
+    except :pass
 
     await interaction.response.send_message('start!')
 
