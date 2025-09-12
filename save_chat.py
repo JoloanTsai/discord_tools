@@ -54,7 +54,7 @@ async def get_channels_info_and_save(client, select_guild_ids:list[int]|None = N
         
         # 遍歷伺服器內的所有頻道
         for channel in guild.channels:
-            if channel.id in ignore_ch:continue #跳過 ignore_ch
+            if ignore_ch and (channel.id in ignore_ch):continue #跳過 ignore_ch
 
             category_name = channel.category.name if channel.category else None
             category_id = channel.category.id if channel.category else None
@@ -72,7 +72,7 @@ async def get_channels_info_and_save(client, select_guild_ids:list[int]|None = N
             if isinstance(channel, discord.TextChannel):
                 threads = channel.threads
                 for thread in threads:
-                    if thread.id in ignore_ch:continue #跳過 ignore_ch
+                    if ignore_ch and (thread.id in ignore_ch):continue #跳過 ignore_ch
                     thread_dict = {'channel_name' : thread.name, 
                             'channel_id' : thread.id, 
                             'channel_type' : str(thread.type), 

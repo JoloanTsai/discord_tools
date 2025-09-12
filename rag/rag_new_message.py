@@ -148,7 +148,7 @@ async def process_tasks(pool: EmbeddingClientPool, task_queue: asyncio.Queue):
                     results.extend(a)
                     
                 finally:
-                    pool.release(client)
+                    await pool.release(client)
                     task_queue.task_done()
                     
             except Exception as e:
@@ -249,7 +249,7 @@ async def rag_new_message():
             q.put_nowait(x)
 
 
-        workers = [EmbeddingClient(x['model_name'], x['api_key'], x['api_url']) for x in EMBEDDING_MODELS]
+        workers = [EmbeddingClient(x['model_name'], x['api_key'], x['api_url'], x['rpm'], EMBEDDING_DIMENSION) for x in EMBEDDING_MODELS]
         pool = EmbeddingClientPool(workers)
         results:list[tuple[str, str, list]] = await process_tasks(pool, q) # list[tuple[id, doc, embedding]]
 

@@ -62,7 +62,9 @@ class ChromaGeminiClient():
         
         return results
     
-    def query_rag_with_width(self, query_texts:str, n_results:int, msg_width=10, collection_name:str = DEFAULT_COLLECTION_NAME) -> str:
+    def query_rag_with_width(self, query_texts:str, n_results:int, msg_width=10, 
+                             collection_name:str = DEFAULT_COLLECTION_NAME, 
+                             ignore_ch:set[int]|None=None) -> str:
         collection = self._get_collection(collection_name)
 
         results = collection.query(
@@ -70,17 +72,30 @@ class ChromaGeminiClient():
             n_results=n_results
         )
         
-        return self.get_width_message(results, msg_width)
+        return self.get_width_message(results, msg_width, ignore_ch)
     
+    def delete_rag_data_by_ch_id(self, guild_id:int|str , channel_id:int|str):
+        
+        collection = self._get_collection(str(guild_id))
+
+        ids = collection.get()["ids"]
+        delete_ids = []
+        for rag_id in ids:
+            g_id, ch_id, id = rag_id.split('_')
+            if ch_id == str(channel_id): delete_ids.append(rag_id)
+
+        collection.delete(ids=delete_ids)
+
     @staticmethod
-    def get_width_message(results:chromadb.QueryResult, msg_width=10) -> str:
+    def get_width_message(results:chromadb.QueryResult, msg_width=10, ignore_ch:set[int]|None=None) -> str:
         docs = results['documents'][0]
         ids = results['ids'][0]
-        obj = [get_range_message_by_msg_width(rag_id, msg_width=msg_width) for rag_id in ids]
+        obj = [get_range_message_by_msg_width(rag_id, msg_width=msg_width, ignore_ch=ignore_ch) for rag_id in ids]
         
         if obj:
             contents = []
             for o, rag_id in zip(obj, ids):
+                if o is None :continue 
                 g_id, ch_id, id = rag_id.split('_')
                 ch_id_save = g_id + '_' + ch_id + '_'
                 # conts = [(f"{ch_id_save}{m['id']}", (
@@ -271,18 +286,20 @@ class ChromaGeminiClient():
 
 
 
-def get_range_message_by_msg_width(rag_id:str, msg_width:int = 10) -> list[dict]:
+def get_range_message_by_msg_width(rag_id:str, msg_width:int = 10, ignore_ch:set[int]|None=None) -> list[dict]:
     '''
     拿到指定 message，並回傳前後 msg_width 個的訊息 
     '''
     g_id, ch_id, id = rag_id.split('_')
     target = int(id)
-    skip = target-msg_width if target >= msg_width else None
-    stop = target+msg_width
-    with open(f"{CHAT_FOLD}/{g_id}/{ch_id}.jsonl", "r", encoding="utf-8") as f:
-        obj = [json.loads(line) for line in islice(f, skip, stop)]
+    if target in ignore_ch:
+        skip = target-msg_width if target >= msg_width else None
+        stop = target+msg_width
+        with open(f"{CHAT_FOLD}/{g_id}/{ch_id}.jsonl", "r", encoding="utf-8") as f:
+            obj = [json.loads(line) for line in islice(f, skip, stop)]
 
-    return obj
+        return obj
+    else: return None
 
 def reults_to_llm_input(ids:list[str], docs:list[str]) -> str:
     '''

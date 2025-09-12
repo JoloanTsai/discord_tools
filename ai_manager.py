@@ -25,7 +25,7 @@ class LlmClient():
         print('this')
 
     async def invoke(self, messages:list[dict])-> str:
-        self.add_request()
+        await self.add_request()
         response =await self.client.chat.completions.create(
             messages=messages,
             model=self.model,
