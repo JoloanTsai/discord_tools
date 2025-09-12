@@ -126,7 +126,7 @@ def get_contents_from_guild(guild_id:int, ignore_ch:set[int]|None=None) -> list[
     
     return contents
 
-async def process_tasks(pool: EmbeddingClientPool, task_queue: asyncio.Queue):
+async def batch_rag(pool: EmbeddingClientPool, task_queue: asyncio.Queue):
     """從任務隊列取任務，用空閒的客戶端處理"""
     results = []
     
@@ -236,7 +236,7 @@ async def rag_new_message():
 
     if contents:
         print(f"正在處理 {len(contents)} 條新訊息...")
-        batched_contents = cut_list_by_batch(contents, EMBEDDING_RPM)
+        batched_contents = cut_list_by_batch(contents, BATCH_SIZE)
 
         # for x in contents:
         #     e = embedding(client, x[0], x[1])
@@ -251,7 +251,7 @@ async def rag_new_message():
 
         workers = [EmbeddingClient(x['model_name'], x['api_key'], x['api_url'], x['rpm'], EMBEDDING_DIMENSION) for x in EMBEDDING_MODELS]
         pool = EmbeddingClientPool(workers)
-        results:list[tuple[str, str, list]] = await process_tasks(pool, q) # list[tuple[id, doc, embedding]]
+        results:list[tuple[str, str, list]] = await batch_rag(pool, q) # list[tuple[id, doc, embedding]]
 
         add_vectors_in_chroma(results, DEFAULT_COLLECTION_NAME)
         print("RAG complete!")
@@ -266,7 +266,7 @@ async def rag_new_message_by_guild(guild_id:int, ignore_ch:set[int]|None=None):
 
     if contents:
         print(f"正在處理 {len(contents)} 條新訊息...")
-        batched_contents = cut_list_by_batch(contents, EMBEDDING_RPM)
+        batched_contents = cut_list_by_batch(contents, BATCH_SIZE)
 
         # for x in contents:
         #     e = embedding(client, x[0], x[1])
@@ -281,7 +281,7 @@ async def rag_new_message_by_guild(guild_id:int, ignore_ch:set[int]|None=None):
 
         workers = [EmbeddingClient(x['model_name'], x['api_key'], x['api_url']) for x in EMBEDDING_MODELS]
         pool = EmbeddingClientPool(workers)
-        results:list[tuple[str, str, list]] = await process_tasks(pool, q) # list[tuple[id, doc, embedding]]
+        results:list[tuple[str, str, list]] = await batch_rag(pool, q) # list[tuple[id, doc, embedding]]
 
         add_vectors_in_chroma(results, str(guild_id))
         print("RAG complete!")

@@ -79,16 +79,19 @@ class LlmClientPool():
 
 
 class EmbeddingClient():
-    def __init__(self, model_name, api_key, api_base_url, tpm=100, dimensions=1536):
+    def __init__(self, model_name, api_key, api_base_url, rpm=100, dimensions=1536):
         self.model=model_name
         self.dimensions = dimensions
-        self.tpm = tpm
+        self.rpm = rpm
+        self.requests = deque()
+        self._lock = asyncio.Lock()
         self.client = AsyncOpenAI(
             api_key=api_key, 
             base_url=api_base_url
         )
 
     async def embedding(self, docs:list[str]) -> list[list]:
+        await self.add_request(len(docs))
         response = await self.client.embeddings.create(
             input=docs,
             model=self.model,
@@ -102,6 +105,24 @@ class EmbeddingClient():
         # print([(id_, doc_, emb_) for id_, doc_, emb_ in zip(ids, docs, embeddings)])
 
         return [(id_, doc_, emb_) for id_, doc_, emb_ in zip(ids, docs, embeddings)]
+    
+    async def add_request(self, counts:int):
+        async with self._lock:
+            while True:
+                now = time.time()
+
+                # 移除過期的 request
+                while self.requests and self.requests[0] < now - 60:
+                    self.requests.popleft()
+
+                if len(self.requests) < self.rpm:
+                    for _ in range(counts):
+                        self.requests.append(now)
+                    return
+
+                wait_time = 60 - (now - self.requests[0])
+                if wait_time > 0:
+                    await asyncio.sleep(wait_time)
     
     
 class EmbeddingClientPool():
@@ -119,7 +140,6 @@ class EmbeddingClientPool():
         return await self._queue.get()
 
     async def release(self, machine):
-        await asyncio.sleep(59)
         self._queue.put_nowait(machine)
 
 
