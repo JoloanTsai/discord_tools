@@ -18,7 +18,7 @@ ROLE_PROMPT_PATH = None
 
 # 可調
 GUILD_IDS : Iterable|int|str|None = None  # 輸入指定的伺服器 ID(s)，只會收集這些伺服器的頻道，None 為全部
-MESSAGES_LIMIT = 3000
+MESSAGES_LIMIT = 10000
 
 
 LLM_MODELS=[
@@ -46,7 +46,14 @@ GEMINI_API_KEY = 'your_key'
 GOOGLE_API_URL = "your_url"
 EMBEDDING_MODEL = "your_model"
 EMBEDDING_DIMENSION = 1536
-EMBEDDING_RPM = 100
+BATCH_SIZE = 50
+
+EMBEDDING_METHOD_CUSTOM = False # if == False, use chroma default embedding, if == True, go to rag/config to set your custom embedding method.
+
+QUERT_N_RESULTS:int = 6
+QUERT_MSG_WIDTH:int = 5
+
+ROLE_PROMPT_PATH = None
 
 
 

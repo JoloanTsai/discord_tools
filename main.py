@@ -1,10 +1,14 @@
+'''
+時區固定為 UTC+0
+'''
+
 import discord
 import chromadb
 from discord.ext import commands
 import re
 from env_settings import *
 from ai_manager import LlmClient, LlmClientPool
-from llm_response import get_today_messages_outputs
+from llm_response import get_today_messages_outputs_ch, get_today_messages_outputs_guild
 from save_chat import save_chat, get_channels_info_and_save
 from rag.rag_new_message import rag_new_message, rag_new_message_by_guild
 from llm_response import ChromaGeminiClient
@@ -56,43 +60,43 @@ async def pool_ai_invoke(pool, message, keep_think = None) -> str:
     finally:
         await pool.release(machine)
 
-llms = [LlmClient(x['model_name'], x['api_key'], x['api_url']) for x in MLM_MODELS]
+llms = [LlmClient(x['model_name'], x['api_key'], x['api_url']) for x in LLM_MODELS]
 llm_pool = LlmClientPool(llms)
 
-with open(PROJECT_ROOT / 'prompts/summary.txt') as f:
+with open(PROJECT_ROOT / 'prompts/summary.txt', 'r', encoding="utf-8") as f:
     summary_prompt = f.read()
 
-with open(PROJECT_ROOT / 'prompts/rag_ans.txt') as f:
+with open(PROJECT_ROOT / 'prompts/rag_ans.txt', 'r', encoding="utf-8") as f:
     rag_ans_prompt = f.read()
 
 try:
-    with open(PROJECT_ROOT / 'target_channels.txt', 'r') as file:
+    with open(PROJECT_ROOT / 'target_channels.txt', 'r', encoding="utf-8") as file:
         content = file.read()
         target_channels:set = eval(content)
 except FileNotFoundError:
     target_channels = set()
-    with open(PROJECT_ROOT / 'target_channels.txt', 'w') as file:
+    with open(PROJECT_ROOT / 'target_channels.txt', 'w', encoding="utf-8") as file:
         file.write('{0,}')
 
 def save_target_channels(target_channels:set):
     content = str(target_channels)
-    with open(PROJECT_ROOT / 'target_channels.txt', 'w') as file:
+    with open(PROJECT_ROOT / 'target_channels.txt', 'w', encoding="utf-8") as file:
         file.write(content)
 
 
 if ROLE_PROMPT_PATH :
-    with open(ROLE_PROMPT_PATH) as f:
+    with open(ROLE_PROMPT_PATH, 'r', encoding="utf-8") as f:
         role_prompt = f.read()
 else: role_prompt = ''
 
 
 
 
-async def get_day_summary_text(channel_id:str, guild_id:int):
+async def get_day_summary_text_ch(channel_id:str, guild_id:int):
     await get_channels_info_and_save(client, select_guild_ids=[guild_id], ignore_ch=target_channels)
     await save_chat(client, guild_ids=guild_id, print_output_info=False)
 
-    input_text = get_today_messages_outputs(channel_id)
+    input_text = get_today_messages_outputs_ch(channel_id)
     if input_text != "Today has no message.":
         messages = [
             {"role": "system", "content": f"{role_prompt}{summary_prompt}"},
@@ -107,18 +111,39 @@ async def get_day_summary_text(channel_id:str, guild_id:int):
 
     return output_text
 
+
+async def get_day_summary_text_guild(guild_id:int):
+    await get_channels_info_and_save(client, select_guild_ids=[guild_id], ignore_ch=target_channels)
+    await save_chat(client, guild_ids=guild_id, print_output_info=False)
+
+    input_text = get_today_messages_outputs_guild(guild_id=guild_id)
+    if input_text != "Today has no message.":
+        messages = [
+            {"role": "system", "content": f"{role_prompt}{summary_prompt}"},
+            {
+                "role": "user",
+                "content": f"{input_text}",
+            },
+        ]
+        output_text = await pool_ai_invoke(llm_pool, messages)
+
+    else : output_text = input_text
+
+    return output_text
+
+
 async def get_rag_query_text(input_text:str, guild_id:int, user_name:str):
     await get_channels_info_and_save(client, select_guild_ids=[guild_id], ignore_ch=target_channels)
     await save_chat(client, guild_ids=guild_id, print_output_info=False)
     await rag_new_message_by_guild(guild_id)
 
     # 拿到現在時間
-    tz_offset = timezone(timedelta(hours=8)) 
+    tz_offset = timezone(timedelta(hours=0)) 
     iso_string = datetime.now(tz_offset).isoformat()
     
     
     cc = ChromaGeminiClient()
-    query_output = cc.query_rag_with_width(input_text, 6, 5, collection_name=str(guild_id), ignore_ch=target_channels)
+    query_output = cc.query_rag_with_width(input_text, QUERT_N_RESULTS, QUERT_MSG_WIDTH, collection_name=str(guild_id), ignore_ch=target_channels)
     web_search = 'None'
 
     # print(query_output)
@@ -181,11 +206,18 @@ async def on_message(message):
 
 
 
-@client.tree.command(name='day_summary', description='彙整該頻道一天的訊息')
-async def day_summary(interaction:discord.Interaction):
+@client.tree.command(name='day_summary_channel', description='彙整該頻道一天的訊息')
+async def day_summary_channel(interaction:discord.Interaction):
     channel_id = str(interaction.channel.id)  # 獲取訊息所在頻道的ID
     guild_id:int = interaction.guild.id
-    output_text = await get_day_summary_text(channel_id, guild_id)
+    output_text = await get_day_summary_text_ch(channel_id, guild_id)
+
+    await interaction.response.send_message(output_text)
+
+@client.tree.command(name='day_summary', description='彙整伺服器中所有頻道一天的訊息')
+async def day_summary(interaction:discord.Interaction):
+    guild_id:int = interaction.guild.id
+    output_text = await get_day_summary_text_guild(guild_id)
 
     await interaction.response.send_message(output_text)
 

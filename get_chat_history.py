@@ -11,11 +11,11 @@ def get_tum_num(chat_history_save_path = CHAT_FOLD) -> dict:
     # check chat_history/tem_num.json 有沒有存在
     save_fold = chat_history_save_path
     try :
-        with open(os.path.join(save_fold, 'tem_num.json'), 'r') as json_file:
+        with open(os.path.join(save_fold, 'tem_num.json'), 'r', encoding="utf-8") as json_file:
             tem_num = json.load(json_file)
     except FileNotFoundError:
         os.makedirs(save_fold, exist_ok=True)
-        with open(os.path.join(save_fold, 'tem_num.json'), 'w') as json_file:
+        with open(os.path.join(save_fold, 'tem_num.json'), 'w', encoding="utf-8") as json_file:
             json_file.write("{}")
         tem_num = {}
 
@@ -169,13 +169,13 @@ class TextChannelInfo():
     @staticmethod
     def save_jsonl(json_dict:list, save_fold:str, file_name:str):
         try:
-            with open(os.path.join(save_fold, file_name), "a") as json_file:
+            with open(os.path.join(save_fold, file_name), "a", encoding="utf-8") as json_file:
                 for j_dict in json_dict:
                     j_data = json.dumps(j_dict, ensure_ascii=False)
                     json_file.write(j_data + '\n')
         except FileNotFoundError:
             makedirs(save_fold, exist_ok=True)
-            with open(os.path.join(save_fold, file_name), "a") as json_file:
+            with open(os.path.join(save_fold, file_name), "a", encoding="utf-8") as json_file:
                 for j_dict in json_dict:
                     j_data = json.dumps(j_dict, ensure_ascii=False)
                     json_file.write(j_data + '\n')
@@ -183,11 +183,11 @@ class TextChannelInfo():
     def _save_json(self, json_dict:dict|list, save_fold:str, file_name:str):
         j_data = json.dumps(json_dict, indent=2, ensure_ascii=False)
         try:
-            with open(os.path.join(save_fold, file_name), "w") as json_file:
+            with open(os.path.join(save_fold, file_name), "w", encoding="utf-8") as json_file:
                 json_file.write(j_data)
         except FileNotFoundError:
             makedirs(save_fold, exist_ok=True)
-            with open(os.path.join(save_fold, file_name), "w") as json_file:
+            with open(os.path.join(save_fold, file_name), "w", encoding="utf-8") as json_file:
                 json_file.write(j_data)
 
 

@@ -8,6 +8,7 @@ import chromadb
 from openai import OpenAI
 from env_settings import *
 from ai_manager import EmbeddingClient, EmbeddingClientPool
+from llm_response import get_contents_str_by_messages
 from save_chat import get_server_info_json
 from itertools import islice
 from chromadb.utils.embedding_functions import EmbeddingFunction
@@ -18,18 +19,18 @@ def get_tum_num(tem_num_save_fold) -> dict:
     # check chat_history/tem_num.json 有沒有存在
     save_fold = tem_num_save_fold
     try :
-        with open(os.path.join(save_fold, 'tem_num.json'), 'r') as json_file:
+        with open(os.path.join(save_fold, 'tem_num.json'), 'r', encoding="utf-8") as json_file:
             tem_num = json.load(json_file)
     except FileNotFoundError:
         os.makedirs(save_fold, exist_ok=True)
-        with open(os.path.join(save_fold, 'tem_num.json'), 'w') as json_file:
+        with open(os.path.join(save_fold, 'tem_num.json'), 'w', encoding="utf-8") as json_file:
             json_file.write("{}")
         tem_num = {}
 
     return tem_num
 
 def save_tem_num(tem_num:dict, tem_num_save_fold):
-    with open(os.path.join(tem_num_save_fold, 'tem_num.json'), "w") as json_file:
+    with open(os.path.join(tem_num_save_fold, 'tem_num.json'), "w", encoding="utf-8") as json_file:
         j_data = json.dumps(tem_num, indent=2, ensure_ascii=False)
         json_file.write(j_data)
 
@@ -66,21 +67,23 @@ def get_contents_from_chat() -> list[tuple[str, str]]:
         skip = emb_tem[ch_id]['last_id']
         with open(f"{CHAT_FOLD}/{str(dc_tem[ch_id]['guild_id'])}/{ch_id}.jsonl", "r", encoding="utf-8") as f:
             obj = [json.loads(line) for line in islice(f, skip, None)]
-            conts = [(f"{ch_id_save}{m['id']}", (
-                (f"message:{m['message']}," if m['message'] else "message: send a attachment,") 
-                + f" send from:{m['author_name']}, time:{m['date']}."
-                + (f"\nThis message is in reply to:{m['replied_message']}" if m['replied_message'] else "")
-            ))
-                    for m in obj]
+            conts = get_contents_str_by_messages(obj, ch_id_save)
+            # conts = [(f"{ch_id_save}{m['id']}", (
+            #     (f"message:{m['message']}," if m['message'] else "message: send a attachment,") 
+            #     + f" send from:{m['author_name']}, time:{m['date']}."
+            #     + (f"\nThis message is in reply to:{m['replied_message']}" if m['replied_message'] else "")
+            # ))
+            #         for m in obj]
             
         contents += conts
 
         d = emb_tem.setdefault(ch_id, {})
         d['last_id'] = dc_tem[ch_id]['last_id']
 
-    save_tem_num(emb_tem, PROJECT_ROOT/"rag/embeddings")
+    def save_emb_tem_num():
+        save_tem_num(emb_tem, PROJECT_ROOT/"rag/embeddings")
     
-    return contents
+    return contents, save_emb_tem_num
 
 def get_contents_from_guild(guild_id:int, ignore_ch:set[int]|None=None) -> list[tuple[str, str]]:
     '''
@@ -110,21 +113,23 @@ def get_contents_from_guild(guild_id:int, ignore_ch:set[int]|None=None) -> list[
         skip = emb_tem[ch_id]['last_id']
         with open(f"{CHAT_FOLD}/{g_id}/{ch_id}.jsonl", "r", encoding="utf-8") as f:
             obj = [json.loads(line) for line in islice(f, skip, None)]
-            conts = [(f"{ch_id_save}{m['id']}", (
-                (f"message:{m['message']}," if m['message'] else "message: send a attachment,") 
-                + f" send from:{m['author_name']}, time:{m['date']}."
-                + (f"\nThis message is in reply to:{m['replied_message']}" if m['replied_message'] else "")
-            ))
-                    for m in obj]
+            conts = get_contents_str_by_messages(obj, ch_id_save)
+            # conts = [(f"{ch_id_save}{m['id']}", (
+            #     (f"message:{m['message']}," if m['message'] else "message: send a attachment,") 
+            #     + f" send from:{m['author_name']}, time:{m['date']}."
+            #     + (f"\nThis message is in reply to:{m['replied_message']}" if m['replied_message'] else "")
+            # ))
+            #         for m in obj]
             
         contents += conts
 
         d = emb_tem.setdefault(ch_id, {})
         d['last_id'] = dc_tem[ch_id]['last_id']
 
-    save_tem_num(emb_tem, PROJECT_ROOT/"rag/embeddings")
+    def save_emb_tem_num():
+        save_tem_num(emb_tem, PROJECT_ROOT/"rag/embeddings")
     
-    return contents
+    return contents, save_emb_tem_num
 
 async def batch_rag(pool: EmbeddingClientPool, task_queue: asyncio.Queue):
     """從任務隊列取任務，用空閒的客戶端處理"""
@@ -232,7 +237,7 @@ def add_vectors_in_chroma(contents:list[tuple[str, str, list]], collection_name:
 
 
 async def rag_new_message():
-    contents = get_contents_from_chat()
+    contents, save_emb_tem_num = get_contents_from_chat()
 
     if contents:
         print(f"正在處理 {len(contents)} 條新訊息...")
@@ -254,6 +259,7 @@ async def rag_new_message():
         results:list[tuple[str, str, list]] = await batch_rag(pool, q) # list[tuple[id, doc, embedding]]
 
         add_vectors_in_chroma(results, DEFAULT_COLLECTION_NAME)
+        save_emb_tem_num()
         print("RAG complete!")
     
     else : print("Has no more new data need to rag")
@@ -262,7 +268,7 @@ async def rag_new_message_by_guild(guild_id:int, ignore_ch:set[int]|None=None):
     '''
     只針對單一 guild 內的訊息去做 RAG
     '''
-    contents = get_contents_from_guild(guild_id, ignore_ch)
+    contents, save_emb_tem_num = get_contents_from_guild(guild_id, ignore_ch)
 
     if contents:
         print(f"正在處理 {len(contents)} 條新訊息...")
@@ -279,11 +285,12 @@ async def rag_new_message_by_guild(guild_id:int, ignore_ch:set[int]|None=None):
             q.put_nowait(x)
 
 
-        workers = [EmbeddingClient(x['model_name'], x['api_key'], x['api_url']) for x in EMBEDDING_MODELS]
+        workers = [EmbeddingClient(x['model_name'], x['api_key'], x['api_url'], x['rpm'], EMBEDDING_DIMENSION) for x in EMBEDDING_MODELS]
         pool = EmbeddingClientPool(workers)
         results:list[tuple[str, str, list]] = await batch_rag(pool, q) # list[tuple[id, doc, embedding]]
 
         add_vectors_in_chroma(results, str(guild_id))
+        save_emb_tem_num()
         print("RAG complete!")
     
     else : print("Has no more new data need to rag")

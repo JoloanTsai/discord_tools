@@ -15,9 +15,10 @@ from openai import OpenAI
 from env_settings import *
 from chromadb.utils.embedding_functions import EmbeddingFunction, DefaultEmbeddingFunction
 from itertools import islice
-from datetime import datetime
+from datetime import datetime, timezone
 from save_chat import get_tum_num
-from get_chat_history import get_date_messages
+from get_chat_history import get_date_messages, get_channel_ids
+from save_chat import get_server_info_json
 # from rag.config import custom_ef
 
 
@@ -98,12 +99,6 @@ class ChromaGeminiClient():
                 if o is None :continue 
                 g_id, ch_id, id = rag_id.split('_')
                 ch_id_save = g_id + '_' + ch_id + '_'
-                # conts = [(f"{ch_id_save}{m['id']}", (
-                #     (f"message:{m['message']}," if m['message'] else "message: send a attachment,") 
-                #     + f" send from:{m['author_name']}, time:{m['date']}."
-                #     + (f"\nThis message is in reply to:{m['replied_message']}" if m['replied_message'] else "")
-                # ))
-                #         for m in o]
 
                 conts = get_contents_str_by_messages(o, ch_id_save)
                 contents += conts
@@ -129,163 +124,6 @@ class ChromaGeminiClient():
         return collection
 
 
-# class ChromaClient():
-#     def __init__(self, eb_custom:str = EMBEDDING_METHOD_CUSTOM, model_name=EMBEDDING_MODEL, api_key=GEMINI_API_KEY, 
-#                  api_url=GOOGLE_API_URL, embedding_dim= EMBEDDING_DIMENSION,
-#                  chroma_client_path=CHROMA_CLIENT_PATH):
-        
-        
-#         if not eb_custom:
-#             self.ef = custom_ef
-#         else:
-#             self.ef = DefaultEmbeddingFunction()
-
-#         self.chroma_client = chromadb.PersistentClient(path=chroma_client_path)
-
-
-#     def query_rag(self, query_texts:str, n_results:int, collection_name:str = DEFAULT_COLLECTION_NAME) -> chromadb.QueryResult:
-#         collection = self._get_collection(collection_name)
-
-#         results = collection.query(
-#             query_texts=query_texts,
-#             n_results=n_results
-#         )
-        
-#         return results
-    
-#     def query_rag_with_width(self, query_texts:str, n_results:int, msg_width=10, collection_name:str = DEFAULT_COLLECTION_NAME) -> str:
-#         collection = self._get_collection(collection_name)
-
-#         results = collection.query(
-#             query_texts=query_texts,
-#             n_results=n_results
-#         )
-        
-#         return self.get_width_message(results, msg_width)
-    
-#     @staticmethod
-#     def get_width_message(results:chromadb.QueryResult, msg_width=10) -> str:
-#         docs = results['documents'][0]
-#         ids = results['ids'][0]
-#         obj = [get_range_message_by_msg_width(rag_id, msg_width=msg_width) for rag_id in ids]
-        
-#         if obj:
-#             contents = []
-#             for o, rag_id in zip(obj, ids):
-#                 g_id, ch_id, id = rag_id.split('_')
-#                 ch_id_save = g_id + '_' + ch_id + '_'
-#                 # conts = [(f"{ch_id_save}{m['id']}", (
-#                 #     (f"message:{m['message']}," if m['message'] else "message: send a attachment,") 
-#                 #     + f" send from:{m['author_name']}, time:{m['date']}."
-#                 #     + (f"\nThis message is in reply to:{m['replied_message']}" if m['replied_message'] else "")
-#                 # ))
-#                 #         for m in o]
-
-#                 conts = get_contents_str_by_messages(o, ch_id_save)
-#                 contents += conts
-
-#             contents = list(set(contents)) # 去除list中重複的元素
-#             ids, docs = zip(*contents)
-#             output_text = reults_to_llm_input(ids, docs)
-
-#             return output_text
-
-#         else :
-#             return "Got no one message."
-
-        
-    
-#     def _get_collection(self, collection_name:str) -> chromadb.Collection:
-#         try:
-#             collection = self.chroma_client.get_collection(name=collection_name, embedding_function=self.ef)
-
-#         except chromadb.errors.NotFoundError:
-#             collection = self.chroma_client.create_collection(name=collection_name, embedding_function=self.ef)
-
-#         return collection
-
-
-
-
-# class ChromaGeminiClient():
-#     def __init__(self, eb_custom:str = EMBEDDING_METHOD_CUSTOM, model_name=EMBEDDING_MODEL, api_key=GEMINI_API_KEY, 
-#                  api_url=GOOGLE_API_URL, embedding_dim= EMBEDDING_DIMENSION,
-#                  chroma_client_path=CHROMA_CLIENT_PATH):
-        
-        
-#         if not eb_custom:
-#             self.ef = custom_ef
-#         else:
-#             self.ef = DefaultEmbeddingFunction()
-
-#         self.chroma_client = chromadb.PersistentClient(path=chroma_client_path)
-
-
-#     def query_rag(self, query_texts:str, n_results:int, collection_name:str = DEFAULT_COLLECTION_NAME) -> chromadb.QueryResult:
-#         collection = self._get_collection(collection_name)
-
-#         results = collection.query(
-#             query_texts=query_texts,
-#             n_results=n_results
-#         )
-        
-#         return results
-    
-#     def query_rag_with_width(self, query_texts:str, n_results:int, msg_width=10, collection_name:str = DEFAULT_COLLECTION_NAME) -> str:
-#         collection = self._get_collection(collection_name)
-
-#         results = collection.query(
-#             query_texts=query_texts,
-#             n_results=n_results
-#         )
-        
-#         return self.get_width_message(results, msg_width)
-    
-#     @staticmethod
-#     def get_width_message(results:chromadb.QueryResult, msg_width=10) -> str:
-#         docs = results['documents'][0]
-#         ids = results['ids'][0]
-#         obj = [get_range_message_by_msg_width(rag_id, msg_width=msg_width) for rag_id in ids]
-        
-#         if obj:
-#             contents = []
-#             for o, rag_id in zip(obj, ids):
-#                 g_id, ch_id, id = rag_id.split('_')
-#                 ch_id_save = g_id + '_' + ch_id + '_'
-#                 # conts = [(f"{ch_id_save}{m['id']}", (
-#                 #     (f"message:{m['message']}," if m['message'] else "message: send a attachment,") 
-#                 #     + f" send from:{m['author_name']}, time:{m['date']}."
-#                 #     + (f"\nThis message is in reply to:{m['replied_message']}" if m['replied_message'] else "")
-#                 # ))
-#                 #         for m in o]
-
-#                 conts = get_contents_str_by_messages(o, ch_id_save)
-#                 contents += conts
-
-#             contents = list(set(contents)) # 去除list中重複的元素
-#             ids, docs = zip(*contents)
-#             output_text = reults_to_llm_input(ids, docs)
-
-#             return output_text
-
-#         else :
-#             return "Got no one message."
-
-        
-    
-#     def _get_collection(self, collection_name:str) -> chromadb.Collection:
-#         try:
-#             collection = self.chroma_client.get_collection(name=collection_name, embedding_function=self.ef)
-
-#         except chromadb.errors.NotFoundError:
-#             collection = self.chroma_client.create_collection(name=collection_name, embedding_function=self.ef)
-
-#         return collection
-
-
-
-
-
 def get_range_message_by_msg_width(rag_id:str, msg_width:int = 10, ignore_ch:set[int]|None=None) -> list[dict]:
     '''
     拿到指定 message，並回傳前後 msg_width 個的訊息 
@@ -309,7 +147,7 @@ def reults_to_llm_input(ids:list[str], docs:list[str]) -> str:
     docs : [messages,]
     '''
     try : 
-        with open(SERVER_INFO_FILE_PATH, 'r') as f:
+        with open(SERVER_INFO_FILE_PATH, 'r', encoding="utf-8") as f:
             server_info_json = json.load(f)
     except FileNotFoundError : server_info_json = None
 
@@ -335,12 +173,12 @@ def reults_to_llm_input(ids:list[str], docs:list[str]) -> str:
     return output_text
 
 
-def get_today_messages_outputs(ch_id:str, max_outputs:int=100):
+def get_today_messages_outputs_ch(ch_id:str, max_outputs:int=100):
     dc_tem = get_tum_num()
     g_id = str(dc_tem[ch_id]['guild_id'])
     ch_id_save = g_id+'_'+ch_id+'_'
 
-    today = datetime.now().date()
+    today = datetime.now(timezone.utc).date()
     obj = get_date_messages(ch_id, today, max_outputs=max_outputs)
     if obj:
         contents = get_contents_str_by_messages(obj, ch_id_save)
@@ -349,6 +187,32 @@ def get_today_messages_outputs(ch_id:str, max_outputs:int=100):
     
         return output_text
     
+    else:
+        return "Today has no message."
+
+def get_today_messages_outputs_guild(guild_id:str|int, max_outputs:int=100):
+    output_text = ""
+    g_id = str(guild_id)
+
+    server_info_json = get_server_info_json()
+    contents = []
+
+    today = datetime.now(timezone.utc).date()
+    chs = get_channel_ids(server_info_json, guild_id, CHANNEL_TYPE)
+    for ch_id_int in chs:
+        ch_id = str(ch_id_int)
+        obj = get_date_messages(ch_id, today, max_outputs=max_outputs)
+        if obj:
+            ch_id_save = g_id+'_'+ch_id+'_'
+            conts = get_contents_str_by_messages(obj, ch_id_save)
+            contents += conts
+
+    if contents:
+        contents = list(set(contents)) # 去除list中重複的元素
+        ids, docs = zip(*contents)
+        output_text = reults_to_llm_input(ids, docs)
+        
+        return output_text
     else:
         return "Today has no message."
 

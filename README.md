@@ -46,6 +46,14 @@ EMBEDDING_MODEL = "your_model"
 ```
 
 
+Optional:
+```python
+QUERT_N_RESULTS:int = 6 # 回答使用 RAG 時會回傳幾個搜尋結果
+QUERT_MSG_WIDTH:int = 5 # 回傳的搜尋結果會再加上前後幾個訊息
+
+ROLE_PROMPT_PATH = None # 選擇想要的回答角色風格
+
+```
 
 <br>
 

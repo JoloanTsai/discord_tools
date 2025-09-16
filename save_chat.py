@@ -10,7 +10,7 @@ intents.guilds = True  # 啟用伺服器 Intent
 
 
 def save_tem_num(tem_num:dict, chat_history_save_path = CHAT_FOLD):
-    with open(os.path.join(chat_history_save_path, 'tem_num.json'), "w") as json_file:
+    with open(os.path.join(chat_history_save_path, 'tem_num.json'), "w", encoding="utf-8") as json_file:
         j_data = json.dumps(tem_num, indent=2, ensure_ascii=False)
         json_file.write(j_data)
 
@@ -30,7 +30,7 @@ def get_last_message_id_from_tem(tem_num:dict, channel_id):
 
 def get_server_info_json(server_info_json=SERVER_INFO_FILE_PATH) -> dict:
     try : 
-        with open(server_info_file_path, 'r') as f:
+        with open(server_info_file_path, 'r', encoding="utf-8") as f:
             server_info_json = json.load(f)
     except FileNotFoundError : server_info_json = {}
 
@@ -85,7 +85,7 @@ async def get_channels_info_and_save(client, select_guild_ids:list[int]|None = N
         server_info_json[str(guild.id)] = guild_dict
     
     j_data = json.dumps(server_info_json, indent=2, ensure_ascii=False)
-    with open(server_info_file_path, "w") as json_file:
+    with open(server_info_file_path, "w", encoding="utf-8") as json_file:
         json_file.write(j_data)
     
     print('Complete collecting!')
@@ -95,7 +95,7 @@ async def save_chat(client, guild_ids = GUILD_IDS, print_output_info=True,
     tem_num = get_tum_num()
 
     try : 
-        with open(server_info_file_path, 'r') as f:
+        with open(server_info_file_path, 'r', encoding="utf-8") as f:
             server_info_json = json.load(f)
     except FileNotFoundError : server_info_json = None
 
