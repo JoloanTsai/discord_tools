@@ -36,6 +36,10 @@ def get_server_info_json(server_info_json=SERVER_INFO_FILE_PATH) -> dict:
 
     return server_info_json
 
+async def limited_get_messages_and_latest_id_message_id(worker:TextChannelInfo, sem):
+    async with sem:  # 最多允許 50 個同時進入
+        return await worker.get_messages_and_latest_id_message_id()
+
 
 async def get_channels_info_and_save(client, select_guild_ids:list[int]|None = None, 
                                      server_info_file_path = SERVER_INFO_FILE_PATH,
@@ -58,12 +62,14 @@ async def get_channels_info_and_save(client, select_guild_ids:list[int]|None = N
 
             category_name = channel.category.name if channel.category else None
             category_id = channel.category.id if channel.category else None
+            perms = channel.permissions_for(guild.me)
             
             ch_dict = {'channel_name' : channel.name, 
                     'channel_id' : channel.id, 
                     'channel_type' : str(channel.type), 
                     'category_name': category_name,
-                    'category_id': category_id}
+                    'category_id': category_id, 
+                    'has_permission' : perms.read_messages}
             
             guild_dict['channels'][str(channel.id)]=ch_dict
 
@@ -77,7 +83,8 @@ async def get_channels_info_and_save(client, select_guild_ids:list[int]|None = N
                             'channel_id' : thread.id, 
                             'channel_type' : str(thread.type), 
                             'category_name': channel.name,
-                            'category_id': channel.id}
+                            'category_id': channel.id,
+                            'has_permission' : perms.read_messages}
                     guild_dict['channels'][str(thread.id)]=thread_dict 
 
                     print(f"    thread: {thread.name} (ID: {thread.id})")
@@ -110,7 +117,11 @@ async def save_chat(client, guild_ids = GUILD_IDS, print_output_info=True,
                                get_last_message_id_from_tem(tem_num, ch),
                                client.user) for ch in chs]
     print('正在檢查更新並搜集', str(len(workers)), '個頻道的對話...')
-    tasks = [w.get_messages_and_latest_id_message_id() for w in workers]
+    # tasks = [w.get_messages_and_latest_id_message_id() for w in workers]
+    # 限制同時的下載量
+    sem = asyncio.Semaphore(50)  # 限制最大並行數 50
+    tasks = [limited_get_messages_and_latest_id_message_id(w, sem) for w in workers]
+    
     results = await asyncio.gather(*tasks)
 
     log_dict = {}

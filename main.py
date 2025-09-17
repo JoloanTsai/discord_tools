@@ -46,10 +46,10 @@ class ModalInputer(discord.ui.Modal, title = "text inputer"):
         self.user_input = self.text_input.value
         await interaction.response.defer()
 
-async def pool_ai_invoke(pool, message, keep_think = None) -> str:
+async def pool_ai_invoke(pool, message, keep_think = None, think_mode=None) -> str:
     try:
         machine = await pool.acquire()
-        result = await machine.invoke(message)
+        result = await machine.invoke(message, think_mode)
 
         # 像Qwen3 會將思考和輸出放在一起，只保留輸出移除思考內容
         if (not keep_think) and ("<think>" in result) and ("</think>" in result):
@@ -78,6 +78,8 @@ except FileNotFoundError:
     with open(PROJECT_ROOT / 'target_channels.txt', 'w', encoding="utf-8") as file:
         file.write('{0,}')
 
+no_think_prompt = '/no_think ' if not REASONING else ''
+
 def save_target_channels(target_channels:set):
     content = str(target_channels)
     with open(PROJECT_ROOT / 'target_channels.txt', 'w', encoding="utf-8") as file:
@@ -99,7 +101,7 @@ async def get_day_summary_text_ch(channel_id:str, guild_id:int):
     input_text = get_today_messages_outputs_ch(channel_id)
     if input_text != "Today has no message.":
         messages = [
-            {"role": "system", "content": f"{role_prompt}{summary_prompt}"},
+            {"role": "system", "content": f"{no_think_prompt}{role_prompt}{summary_prompt}"},
             {
                 "role": "user",
                 "content": f"{input_text}",
@@ -119,7 +121,7 @@ async def get_day_summary_text_guild(guild_id:int):
     input_text = get_today_messages_outputs_guild(guild_id=guild_id)
     if input_text != "Today has no message.":
         messages = [
-            {"role": "system", "content": f"{role_prompt}{summary_prompt}"},
+            {"role": "system", "content": f"{no_think_prompt}{role_prompt}{summary_prompt}"},
             {
                 "role": "user",
                 "content": f"{input_text}",
@@ -149,7 +151,7 @@ async def get_rag_query_text(input_text:str, guild_id:int, user_name:str):
     # print(query_output)
 
     messages = [
-                {"role": "system", "content": f"{role_prompt}{rag_ans_prompt}"},
+                {"role": "system", "content": f"{no_think_prompt}{role_prompt}{rag_ans_prompt}"},
                 {
                     "role": "user",
                     "content": f"query_output:{ {query_output} }.\n\n web_search:{ {web_search} }. \n\n，使用者({user_name})問的問題：{ {input_text} }.\n 現在時間：{iso_string}",
@@ -208,18 +210,20 @@ async def on_message(message):
 
 @client.tree.command(name='day_summary_channel', description='彙整該頻道一天的訊息')
 async def day_summary_channel(interaction:discord.Interaction):
+    await interaction.response.defer()
     channel_id = str(interaction.channel.id)  # 獲取訊息所在頻道的ID
     guild_id:int = interaction.guild.id
     output_text = await get_day_summary_text_ch(channel_id, guild_id)
 
-    await interaction.response.send_message(output_text)
+    await interaction.followup.send(output_text)
 
 @client.tree.command(name='day_summary', description='彙整伺服器中所有頻道一天的訊息')
 async def day_summary(interaction:discord.Interaction):
+    await interaction.response.defer()
     guild_id:int = interaction.guild.id
     output_text = await get_day_summary_text_guild(guild_id)
 
-    await interaction.response.send_message(output_text)
+    await interaction.followup.send(output_text)
 
 @client.tree.command(name='rag_query', description='從rag中提取資訊給大模型回答')
 async def rag_query(interaction:discord.Interaction):

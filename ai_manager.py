@@ -24,13 +24,14 @@ class LlmClient():
         # dojob()
         print('this')
 
-    async def invoke(self, messages:list[dict])-> str:
+    async def invoke(self, messages:list[dict], reasoning_effort=None)-> str:
         await self.add_request()
         response =await self.client.chat.completions.create(
             messages=messages,
             model=self.model,
             stream=self.stream,
             temperature=self.temperature,
+            reasoning_effort=reasoning_effort
         )
         return response.choices[0].message.content
     

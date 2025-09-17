@@ -216,7 +216,8 @@ gemini_ef = GeminiEmbeddingFunction(client, EMBEDDING_MODEL, EMBEDDING_DIMENSION
 
 
 
-def add_vectors_in_chroma(contents:list[tuple[str, str, list]], collection_name:str, embedding_function = None):
+def add_vectors_in_chroma(contents:list[tuple[str, str, list]], collection_name:str, 
+                          embedding_function = None, batch_size = 5000):
     '''
     將ids, documents, embeddings 加進 chroma 資料庫
     '''
@@ -227,12 +228,19 @@ def add_vectors_in_chroma(contents:list[tuple[str, str, list]], collection_name:
         except chromadb.errors.NotFoundError:
             collection = chroma_client.create_collection(name=collection_name, embedding_function=embedding_function)
 
-            
-        collection.upsert(
-            ids=[cont[0] for cont in contents],
-            documents=[cont[1] for cont in contents],
-            embeddings=[cont[2] for cont in contents],
-        )
+        # collection.upsert(
+        #     ids=[cont[0] for cont in contents],
+        #     documents=[cont[1] for cont in contents],
+        #     embeddings=[cont[2] for cont in contents],
+        # )
+
+        for i in range(0, len(contents), batch_size):
+            batch = contents[i:i+batch_size]
+            collection.upsert(
+                ids=[c[0] for c in batch],
+                documents=[c[1] for c in batch],
+                embeddings=[c[2] for c in batch],
+            )
 
 
 

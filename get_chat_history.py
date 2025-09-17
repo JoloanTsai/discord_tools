@@ -192,7 +192,8 @@ class TextChannelInfo():
 
 
 def get_channel_ids(server_info_json:dict, select_guilds:Iterable|int|str|None = None,
-                         select_ch_type:Iterable|str|None = None) -> list[int]:
+                         select_ch_type:Iterable|str|None = None, 
+                         just_permission = True) -> list[int]:
     '''
     從 server_info_json 拿取 Channel ids
     select_guilds : input guild(s) which you want get Channel ids
@@ -207,7 +208,6 @@ def get_channel_ids(server_info_json:dict, select_guilds:Iterable|int|str|None =
     
     else: guild_ids = [guild for guild in server_info_json]
         
-    # print(type(guild_ids), guild_ids)
 
     channel_types = {type.name for type in discord.ChannelType} # 拿到頻道所有的channel_type
     if select_ch_type is not None: 
@@ -222,15 +222,13 @@ def get_channel_ids(server_info_json:dict, select_guilds:Iterable|int|str|None =
         
         channel_ids = [ch_info['channel_id'] for guild in guild_ids
                                             for ch_info in server_info_json[str(guild)]['channels'].values()
-                                            if ch_info['channel_type'] in select_ch_type
+                                            if (ch_info['channel_type'] in select_ch_type) and ch_info['has_permission'] # Check Channel Permission
                         ]
     else :
-        # channel_ids = []
-        # for guild in server_info_json:
-        #     channel_ids_in_guild = [ch['channel_id'] for ch in server_info_json[guild]['channels']]
-        #     channel_ids += channel_ids_in_guild
         channel_ids = [int(ch) for guild in guild_ids
-                                for ch in server_info_json[guild]['channels']]
+                                for ch in server_info_json[guild]['channels']
+                                if server_info_json[str(guild)]['channels'][ch]['has_permission'] # Check Channel Permission
+                                ]
         
     return channel_ids
 
@@ -251,6 +249,8 @@ def get_date_messages(ch_id:str, select_date:datetime.date = datetime.now().date
 
     obj = [item for item in obj if datetime.fromisoformat(item['date']).date() == select_date]
     return obj
+
+
 
 
 class ChannelTypeError(Exception):
