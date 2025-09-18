@@ -7,7 +7,7 @@ import json
 import chromadb
 from openai import OpenAI
 from env_settings import *
-from ai_manager import EmbeddingClient, EmbeddingClientPool
+from ai_manager import EmbeddingClientPool, embedding_pool
 from llm_response import get_contents_str_by_messages
 from save_chat import get_server_info_json
 from itertools import islice
@@ -237,9 +237,7 @@ async def rag_new_message():
             q.put_nowait(x)
 
 
-        workers = [EmbeddingClient(x['model_name'], x['api_key'], x['api_url'], x['rpm'], EMBEDDING_DIMENSION) for x in EMBEDDING_MODELS]
-        pool = EmbeddingClientPool(workers)
-        results:list[tuple[str, str, list]] = await batch_rag(pool, q) # list[tuple[id, doc, embedding]]
+        results:list[tuple[str, str, list]] = await batch_rag(embedding_pool, q) # list[tuple[id, doc, embedding]]
 
         add_vectors_in_chroma(results, DEFAULT_COLLECTION_NAME)
         save_emb_tem_num()
@@ -267,10 +265,7 @@ async def rag_new_message_by_guild(guild_id:int, ignore_ch:set[int]|None=None):
         for x in batched_contents:
             q.put_nowait(x)
 
-
-        workers = [EmbeddingClient(x['model_name'], x['api_key'], x['api_url'], x['rpm'], EMBEDDING_DIMENSION) for x in EMBEDDING_MODELS]
-        pool = EmbeddingClientPool(workers)
-        results:list[tuple[str, str, list]] = await batch_rag(pool, q) # list[tuple[id, doc, embedding]]
+        results:list[tuple[str, str, list]] = await batch_rag(embedding_pool, q) # list[tuple[id, doc, embedding]]
 
         add_vectors_in_chroma(results, str(guild_id))
         save_emb_tem_num()

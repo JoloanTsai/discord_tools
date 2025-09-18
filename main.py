@@ -103,7 +103,7 @@ async def query_rag(pool:EmbeddingClientPool, input_text, guild_id:str|int):
 
 
 async def get_day_summary_text_ch(channel_id:str, guild_id:int):
-    await get_channels_info_and_save(client, select_guild_ids=[guild_id], ignore_ch=target_channels)
+    await get_channels_info_and_save(client, select_guild_ids=[guild_id], ignore_ch=target_channels, print_output_info=False)
     await save_chat(client, guild_ids=guild_id, print_output_info=False)
 
     input_text = get_today_messages_outputs_ch(channel_id)
@@ -123,7 +123,7 @@ async def get_day_summary_text_ch(channel_id:str, guild_id:int):
 
 
 async def get_day_summary_text_guild(guild_id:int):
-    await get_channels_info_and_save(client, select_guild_ids=[guild_id], ignore_ch=target_channels)
+    await get_channels_info_and_save(client, select_guild_ids=[guild_id], ignore_ch=target_channels, print_output_info=False)
     await save_chat(client, guild_ids=guild_id, print_output_info=False)
 
     input_text = get_today_messages_outputs_guild(guild_id=guild_id)
@@ -143,7 +143,7 @@ async def get_day_summary_text_guild(guild_id:int):
 
 
 async def get_rag_query_text(input_text:str, guild_id:int, user_name:str):
-    await get_channels_info_and_save(client, select_guild_ids=[guild_id], ignore_ch=target_channels)
+    await get_channels_info_and_save(client, select_guild_ids=[guild_id], ignore_ch=target_channels, print_output_info=False)
     await save_chat(client, guild_ids=guild_id, print_output_info=False)
     await rag_new_message_by_guild(guild_id)
 

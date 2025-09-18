@@ -8,7 +8,6 @@ from datetime import datetime
 from itertools import islice
 
 def get_tum_num(chat_history_save_path = CHAT_FOLD) -> dict:
-    # check chat_history/tem_num.json 有沒有存在
     save_fold = chat_history_save_path
     try :
         with open(os.path.join(save_fold, 'tem_num.json'), 'r', encoding="utf-8") as json_file:
@@ -63,19 +62,6 @@ class TextChannelInfo():
     async def get_latest_id_and_message_id(self) -> tuple[int, int]:
         return self.latest_id, self.lastest_message_id
 
-    # async def _get_chat_message(self) -> tuple[list, int, int]:
-    #     '''
-        
-    #     '''
-    #     # (messages, latest_id), lastest_message_id = await asyncio.gather(
-    #     #     self.get_messages(self.channel, last_id = self.last_id, last_message_id = self.last_message_id, atacchment_save_path = self.attachment_save_path),
-    #     #     self.get_lastest_message_id(self.channel)
-    #     #         )
-        
-    #     messages, latest_id, lastest_message_id = await self.get_messages_and_latest_message_id(
-    #         self.channel, last_id = self.last_id, last_message_id = self.last_message_id, 
-    #         atacchment_save_path = self.attachment_save_path)
-    #     return messages, latest_id, lastest_message_id
 
     async def extract_message_data(self, message:discord.Message, id, atacchment_save_path):
         attachment_urls = []
@@ -119,7 +105,7 @@ class TextChannelInfo():
                 id += 1
                 message_data = await self.extract_message_data(msg, id, atacchment_save_path)
                 messages.append(message_data)
-                # print('e')
+
 
         else:
             async for msg in channel.history(limit= MESSAGES_LIMIT, oldest_first=True):
@@ -127,10 +113,9 @@ class TextChannelInfo():
                 id+=1
                 message_data = await self.extract_message_data(msg, id, atacchment_save_path)
                 messages.append(message_data)
-                # print('a')
+
 
         latest_id = id
-        # print(messages)
         if messages:
             latest_message_id = messages[-1]['message_id']
         else : latest_message_id = last_message_id
@@ -145,14 +130,14 @@ class TextChannelInfo():
                 id += 1
                 message_data = await self.extract_message_data(msg, id, atacchment_save_path)
                 messages.append(message_data)
-                # print('e')
+
 
         else:
             async for msg in channel.history(limit= MESSAGES_LIMIT, oldest_first=True):
                 id+=1
                 message_data = await self.extract_message_data(msg, id, atacchment_save_path)
                 messages.append(message_data)
-                # print('a')
+
 
         latest_id = id
         return messages, latest_id

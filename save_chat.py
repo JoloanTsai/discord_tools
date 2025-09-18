@@ -43,7 +43,7 @@ async def limited_get_messages_and_latest_id_message_id(worker:TextChannelInfo, 
 
 async def get_channels_info_and_save(client, select_guild_ids:list[int]|None = None, 
                                      server_info_file_path = SERVER_INFO_FILE_PATH,
-                                     ignore_ch:set[int]|None=None):
+                                     ignore_ch:set[int]|None=None, print_output_info=True):
     print('Collecting server data ...')
     server_info_json = get_server_info_json()
     if not select_guild_ids:
@@ -53,8 +53,6 @@ async def get_channels_info_and_save(client, select_guild_ids:list[int]|None = N
     # 遍歷機器人所在的每個伺服器
     for guild in guilds:
         guild_dict = {'guild_name': guild.name, 'guild_id': guild.id, 'channels' : {}}
-
-        print(f"--- 伺服器: {guild.name} (ID: {guild.id}) ---")
         
         # 遍歷伺服器內的所有頻道
         for channel in guild.channels:
@@ -73,7 +71,6 @@ async def get_channels_info_and_save(client, select_guild_ids:list[int]|None = N
             
             guild_dict['channels'][str(channel.id)]=ch_dict
 
-            print(f"頻道名稱: {channel.name} | ID: {channel.id} | 類型: {channel.type}")
 
             if isinstance(channel, discord.TextChannel):
                 threads = channel.threads
@@ -87,9 +84,16 @@ async def get_channels_info_and_save(client, select_guild_ids:list[int]|None = N
                             'has_permission' : perms.read_messages}
                     guild_dict['channels'][str(thread.id)]=thread_dict 
 
-                    print(f"    thread: {thread.name} (ID: {thread.id})")
-
         server_info_json[str(guild.id)] = guild_dict
+
+    if print_output_info:
+        for guild in server_info_json.values():
+            print(f"--- 伺服器: {guild['guild_name']} (ID: {guild['guild_id']}) ---")
+            for channel in guild['channels'].values():
+                if channel['channel_type'] in {'news_thread', 'public_thread', 'private_thread'}:
+                    print(f"    thread: {channel['channel_name']} (ID: {channel['channel_id']} | 類型: {channel['channel_type']})")
+                else :
+                    print(f"頻道名稱: {channel['channel_name']} | ID: {channel['channel_id']} | 類型: {channel['channel_type']}")
     
     j_data = json.dumps(server_info_json, indent=2, ensure_ascii=False)
     with open(server_info_file_path, "w", encoding="utf-8") as json_file:
@@ -101,16 +105,13 @@ async def save_chat(client, guild_ids = GUILD_IDS, print_output_info=True,
                     ignore_ch:set[int]|None=None):
     tem_num = get_tum_num()
 
-    try : 
-        with open(server_info_file_path, 'r', encoding="utf-8") as f:
-            server_info_json = json.load(f)
-    except FileNotFoundError : server_info_json = None
+    server_info_json = get_server_info_json()
 
     chs = get_channel_ids(server_info_json, guild_ids, CHANNEL_TYPE)
     # print('\n\n\nwowowow', chs, '\n\n\n')
     if ignore_ch:
         chs = set(chs) - ignore_ch
-        print('\n\n\n', chs, '\n\n\n')
+        # print('\n\n\n', chs, '\n\n\n')
 
     workers = [TextChannelInfo(client.get_channel(ch), 
                                get_last_id_from_tem(tem_num, ch), 
