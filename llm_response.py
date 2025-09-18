@@ -10,8 +10,9 @@ def get_range_message_by_msg_width
 
 import chromadb
 import json
+import asyncio
 from collections import defaultdict
-from openai import OpenAI
+from openai import OpenAI, AsyncOpenAI
 from env_settings import *
 from chromadb.utils.embedding_functions import EmbeddingFunction, DefaultEmbeddingFunction
 from itertools import islice
@@ -19,15 +20,17 @@ from datetime import datetime, timezone
 from save_chat import get_tum_num
 from get_chat_history import get_date_messages, get_channel_ids
 from save_chat import get_server_info_json
+from ai_manager import embedding_pool, EmbeddingClient
 # from rag.config import custom_ef
 
 
 
-class GeminiEmbeddingFunction(EmbeddingFunction):
-    def __init__(self, client, model_name, dimensions=1536):
+class ChromaEmbeddingFunction(EmbeddingFunction):
+    def __init__(self, client, model_name, dimensions):
         self.client = client
         self.model_name = model_name
         self.dimensions = dimensions
+    
 
     def __call__(self, texts):
         response = self.client.embeddings.create(
@@ -36,20 +39,16 @@ class GeminiEmbeddingFunction(EmbeddingFunction):
             dimensions=self.dimensions
         )
         return [d.embedding for d in response.data]
-
+    
 
 
 
 class ChromaGeminiClient():
-    def __init__(self, model_name=EMBEDDING_MODEL, api_key=GEMINI_API_KEY, 
-                 api_url=GOOGLE_API_URL, embedding_dim= EMBEDDING_DIMENSION,
+    def __init__(self, emb_client:EmbeddingClient, embedding_dim= EMBEDDING_DIMENSION,
                  chroma_client_path=CHROMA_CLIENT_PATH):
         
-        self.emb_client = OpenAI(
-                    api_key=api_key,
-                    base_url=api_url
-                )
-        self.gemini_ef = GeminiEmbeddingFunction(self.emb_client, model_name, embedding_dim)
+        self.emb_client = emb_client
+        self.ef = ChromaEmbeddingFunction(self.emb_client.no_async_client, emb_client.model, embedding_dim)
         self.chroma_client = chromadb.PersistentClient(path=chroma_client_path)
 
 
@@ -63,10 +62,11 @@ class ChromaGeminiClient():
         
         return results
     
-    def query_rag_with_width(self, query_texts:str, n_results:int, msg_width=10, 
+    async def query_rag_with_width(self, query_texts:str, n_results:int, msg_width=10, 
                              collection_name:str = DEFAULT_COLLECTION_NAME, 
                              ignore_ch:set[int]|None=None) -> str:
         collection = self._get_collection(collection_name)
+        await self.emb_client.add_request(1)
 
         results = collection.query(
             query_texts=query_texts,
@@ -116,10 +116,10 @@ class ChromaGeminiClient():
     
     def _get_collection(self, collection_name:str) -> chromadb.Collection:
         try:
-            collection = self.chroma_client.get_collection(name=collection_name, embedding_function=self.gemini_ef)
+            collection = self.chroma_client.get_collection(name=collection_name, embedding_function=self.ef)
 
         except chromadb.errors.NotFoundError:
-            collection = self.chroma_client.create_collection(name=collection_name, embedding_function=self.gemini_ef)
+            collection = self.chroma_client.create_collection(name=collection_name, embedding_function=self.ef)
 
         return collection
 

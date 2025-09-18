@@ -7,7 +7,7 @@ import chromadb
 from discord.ext import commands
 import re
 from env_settings import *
-from ai_manager import LlmClient, LlmClientPool
+from ai_manager import llm_pool, embedding_pool, EmbeddingClientPool
 from llm_response import get_today_messages_outputs_ch, get_today_messages_outputs_guild
 from save_chat import save_chat, get_channels_info_and_save
 from rag.rag_new_message import rag_new_message, rag_new_message_by_guild
@@ -60,9 +60,6 @@ async def pool_ai_invoke(pool, message, keep_think = None, think_mode=None) -> s
     finally:
         await pool.release(machine)
 
-llms = [LlmClient(x['model_name'], x['api_key'], x['api_url']) for x in LLM_MODELS]
-llm_pool = LlmClientPool(llms)
-
 with open(PROJECT_ROOT / 'prompts/summary.txt', 'r', encoding="utf-8") as f:
     summary_prompt = f.read()
 
@@ -92,6 +89,17 @@ if ROLE_PROMPT_PATH :
 else: role_prompt = ''
 
 
+async def query_rag(pool:EmbeddingClientPool, input_text, guild_id:str|int):
+    try:
+        emb_client = await pool.acquire()
+        cc = ChromaGeminiClient(emb_client)
+        query_output = await cc.query_rag_with_width(input_text, QUERT_N_RESULTS, QUERT_MSG_WIDTH, collection_name=str(guild_id), ignore_ch=target_channels)
+        
+        return query_output
+
+    finally:
+        await pool.release(emb_client)
+        
 
 
 async def get_day_summary_text_ch(channel_id:str, guild_id:int):
@@ -144,8 +152,7 @@ async def get_rag_query_text(input_text:str, guild_id:int, user_name:str):
     iso_string = datetime.now(tz_offset).isoformat()
     
     
-    cc = ChromaGeminiClient()
-    query_output = cc.query_rag_with_width(input_text, QUERT_N_RESULTS, QUERT_MSG_WIDTH, collection_name=str(guild_id), ignore_ch=target_channels)
+    query_output = await query_rag(embedding_pool, input_text, guild_id)
     web_search = 'None'
 
     # print(query_output)
@@ -178,10 +185,12 @@ async def start_ai(interaction:discord.Interaction):
     target_channels.add(channel_id)
     save_target_channels(target_channels)
 
-    cc = ChromaGeminiClient()
     try:
+        emb_client = await embedding_pool.acquire()
+        cc = ChromaGeminiClient(emb_client)
         cc.delete_rag_data_by_ch_id(guild_id, channel_id)
-    except :pass
+    finally:
+        embedding_pool.release(emb_client)
 
     await interaction.response.send_message('start!')
 

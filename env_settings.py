@@ -42,11 +42,8 @@ EMBEDDING_MODELS=[
 
 ]
 
-GEMINI_API_KEY = 'your_key'
-GOOGLE_API_URL = "your_url"
-EMBEDDING_MODEL = "your_model"
 EMBEDDING_DIMENSION = 1536
-BATCH_SIZE = 50
+BATCH_SIZE = 100
 
 EMBEDDING_METHOD_CUSTOM = False # if == False, use chroma default embedding, if == True, go to rag/config to set your custom embedding method.
 
@@ -54,7 +51,7 @@ QUERT_N_RESULTS:int = 6
 QUERT_MSG_WIDTH:int = 5
 
 ROLE_PROMPT_PATH = None
-
+REASONING = False
 
 
 def get_discord_token():

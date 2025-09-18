@@ -191,31 +191,6 @@ def cut_list_by_batch(contents_list:list[str, str], batch_size):
     return [contents_list[i:i + batch_size] for i in range(0, len(contents_list), batch_size)]
 
 
-
-client = OpenAI(
-    api_key=GEMINI_API_KEY,
-    base_url=GOOGLE_API_URL
-)
-
-class GeminiEmbeddingFunction(EmbeddingFunction):
-    def __init__(self, client, model_name="gemini-embedding-001", dimensions=1536):
-        self.client = client
-        self.model_name = model_name
-        self.dimensions = dimensions
-
-    def __call__(self, texts):
-        response = self.client.embeddings.create(
-            model=self.model_name,
-            input=texts,
-            dimensions=self.dimensions
-        )
-        return [d.embedding for d in response.data]
-
-gemini_ef = GeminiEmbeddingFunction(client, EMBEDDING_MODEL, EMBEDDING_DIMENSION)
-
-
-
-
 def add_vectors_in_chroma(contents:list[tuple[str, str, list]], collection_name:str, 
                           embedding_function = None, batch_size = 5000):
     '''

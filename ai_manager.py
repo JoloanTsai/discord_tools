@@ -1,7 +1,7 @@
 import asyncio
 import random
 import time
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, OpenAI
 from collections import deque
 
 class LlmClient():
@@ -90,6 +90,11 @@ class EmbeddingClient():
             api_key=api_key, 
             base_url=api_base_url
         )
+        self.no_async_client = OpenAI(
+            api_key=api_key, 
+            base_url=api_base_url
+        )
+        
 
     async def embedding(self, docs:list[str]) -> list[list]:
         await self.add_request(len(docs))
@@ -127,9 +132,6 @@ class EmbeddingClient():
     
     
 class EmbeddingClientPool():
-    '''
-    執行後休息 1min 所以一次使用最大的 RPM 最有效率
-    '''
     def __init__(self, machines:list):
         self.workers = machines
         self.worker_num:int = len(machines)
@@ -143,7 +145,13 @@ class EmbeddingClientPool():
     async def release(self, machine):
         self._queue.put_nowait(machine)
 
+from env_settings import LLM_MODELS, EMBEDDING_MODELS, EMBEDDING_DIMENSION
 
+llms = [LlmClient(x['model_name'], x['api_key'], x['api_url']) for x in LLM_MODELS]
+llm_pool = LlmClientPool(llms)
+
+emb_models = [EmbeddingClient(x['model_name'], x['api_key'], x['api_url'], x['rpm'], EMBEDDING_DIMENSION) for x in EMBEDDING_MODELS]
+embedding_pool = EmbeddingClientPool(emb_models)
 
 
 async def pool_ai_invoke(pool, message):
