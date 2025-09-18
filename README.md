@@ -40,9 +40,6 @@ EMBEDDING_MODELS=[
 
 ]
 
-GEMINI_API_KEY = 'your_key'
-GOOGLE_API_URL = "your_url"
-EMBEDDING_MODEL = "your_model"
 ```
 
 
