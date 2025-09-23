@@ -3,6 +3,7 @@ import json, os
 import asyncio
 from os import makedirs
 from env_settings import *
+from type_hint import Message
 from collections.abc import Iterable
 from datetime import datetime
 from itertools import islice
@@ -211,7 +212,7 @@ def get_channel_ids(server_info_json:dict, select_guilds:Iterable|int|str|None =
                         ]
     else :
         channel_ids = [int(ch) for guild in guild_ids
-                                for ch in server_info_json[guild]['channels']
+                                for ch in server_info_json[str(guild)]['channels']
                                 if server_info_json[str(guild)]['channels'][ch]['has_permission'] # Check Channel Permission
                                 ]
         
@@ -219,7 +220,7 @@ def get_channel_ids(server_info_json:dict, select_guilds:Iterable|int|str|None =
 
 
 def get_date_messages(ch_id:str, select_date:datetime.date = datetime.now().date(),
-                        max_outputs:int = 100) -> list[dict]:
+                        max_outputs:int = 100) -> list[Message]:
     '''
     回傳該頻道指定日期的 messages，messages 格式與 caht history 一樣
     '''
@@ -235,8 +236,44 @@ def get_date_messages(ch_id:str, select_date:datetime.date = datetime.now().date
     obj = [item for item in obj if datetime.fromisoformat(item['date']).date() == select_date]
     return obj
 
+def get_chs_names(server_info_json:dict, channel_ids:list[int|str]) -> dict:
+    chs_names = {}
+    channels = {}
+    for guild_info in server_info_json.values():
+        channels.update(guild_info['channels'])
+
+    for ch_id in channel_ids:
+        ch_id_str = str(ch_id)
+        ch_name = channels[ch_id_str]['channel_name']
+        chs_names[ch_id_str] = ch_name
+    
+    return chs_names
+
+# def get_chs_names_slow(server_info_json:dict, channel_ids:list[int|str]) -> dict:
+#     chs_names = {}
+#     for ch_id in channel_ids:
+#         ch_id_str = str(ch_id)
+#         for g_id in server_info_json:
+#             if ch_id_str in server_info_json[str(g_id)]['channels']:
+#                 chs_names[ch_id_str] = server_info_json[str(g_id)]['channels'][ch_id_str]['channel_name']
+#     return chs_names
 
 
+def get_message_by_rag_id(rag_id:str) -> Message:
+    '''
+    rag_id = "gid_chid_id"
+
+    return : Message
+    '''
+
+    g_id, ch_id, id = rag_id.split('_')
+    skip = int(id)-1
+    stop = int(id)
+
+    with open(f"{CHAT_FOLD}/{g_id}/{ch_id}.jsonl", "r", encoding="utf-8") as f:
+        obj = [json.loads(line) for line in islice(f, skip, stop)]
+
+    return obj[0]
 
 class ChannelTypeError(Exception):
     pass

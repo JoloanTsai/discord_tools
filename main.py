@@ -3,9 +3,8 @@
 '''
 
 import discord
-import chromadb
 from discord.ext import commands
-import re
+import re, json
 from env_settings import *
 from ai_manager import llm_pool, embedding_pool, EmbeddingClientPool
 from llm_response import get_today_messages_outputs_ch, get_today_messages_outputs_guild
@@ -13,14 +12,12 @@ from save_chat import save_chat, get_channels_info_and_save
 from rag.rag_new_message import rag_new_message, rag_new_message_by_guild
 from llm_response import ChromaGeminiClient
 from datetime import datetime, timezone, timedelta
+from get_chat_history import get_message_by_rag_id
+from type_hint import LlmOutputWithRagid
 
 intents = discord.Intents.all()
 intents.guilds = True  # 啟用伺服器 Intent
 client = commands.Bot(command_prefix = "$", intents = intents)
-
-def delete_rag_data_by_ch_id(chroma_client_path=CHROMA_CLIENT_PATH):
-
-    pass
 
 
 class ModalInputer(discord.ui.Modal, title = "text inputer"):
@@ -46,10 +43,13 @@ class ModalInputer(discord.ui.Modal, title = "text inputer"):
         self.user_input = self.text_input.value
         await interaction.response.defer()
 
-async def pool_ai_invoke(pool, message, keep_think = None, think_mode=None) -> str:
+async def pool_ai_invoke(pool, message, keep_think = None, think_mode=None, json_format=False) -> str:
     try:
         machine = await pool.acquire()
-        result = await machine.invoke(message, think_mode)
+        if not json_format:
+            result = await machine.invoke(message, think_mode)
+        else :
+            result = await machine.invoke_json_response(message)
 
         # 像Qwen3 會將思考和輸出放在一起，只保留輸出移除思考內容
         if (not keep_think) and ("<think>" in result) and ("</think>" in result):
@@ -60,10 +60,11 @@ async def pool_ai_invoke(pool, message, keep_think = None, think_mode=None) -> s
     finally:
         await pool.release(machine)
 
+
 with open(PROJECT_ROOT / 'prompts/summary.txt', 'r', encoding="utf-8") as f:
     summary_prompt = f.read()
 
-with open(PROJECT_ROOT / 'prompts/rag_ans.txt', 'r', encoding="utf-8") as f:
+with open(PROJECT_ROOT / 'prompts/rag_ans_json.txt', 'r', encoding="utf-8") as f:
     rag_ans_prompt = f.read()
 
 try:
@@ -89,11 +90,13 @@ if ROLE_PROMPT_PATH :
 else: role_prompt = ''
 
 
-async def query_rag(pool:EmbeddingClientPool, input_text, guild_id:str|int):
+async def query_rag(pool:EmbeddingClientPool, input_text, guild_id:str|int, show_rag_id = False):
     try:
         emb_client = await pool.acquire()
         cc = ChromaGeminiClient(emb_client)
-        query_output = await cc.query_rag_with_width(input_text, QUERT_N_RESULTS, QUERT_MSG_WIDTH, collection_name=str(guild_id), ignore_ch=target_channels)
+        query_output = await cc.query_rag_with_width(input_text, QUERT_N_RESULTS, QUERT_MSG_WIDTH, 
+                                                     collection_name=str(guild_id), 
+                                                     ignore_ch=target_channels, show_rag_id=show_rag_id)
         
         return query_output
 
@@ -142,7 +145,11 @@ async def get_day_summary_text_guild(guild_id:int):
     return output_text
 
 
-async def get_rag_query_text(input_text:str, guild_id:int, user_name:str):
+async def get_rag_query_text(input_text:str, guild_id:int, user_name:str, metion_message=False) -> str|LlmOutputWithRagid:
+    '''
+    有 metion_message return LlmOutputWithRagid
+    沒有的話 return llm outputtext
+    '''
     await get_channels_info_and_save(client, select_guild_ids=[guild_id], ignore_ch=target_channels, print_output_info=False)
     await save_chat(client, guild_ids=guild_id, print_output_info=False)
     await rag_new_message_by_guild(guild_id)
@@ -152,10 +159,8 @@ async def get_rag_query_text(input_text:str, guild_id:int, user_name:str):
     iso_string = datetime.now(tz_offset).isoformat()
     
     
-    query_output = await query_rag(embedding_pool, input_text, guild_id)
+    query_output = await query_rag(embedding_pool, input_text, guild_id, show_rag_id=metion_message)
     web_search = 'None'
-
-    # print(query_output)
 
     messages = [
                 {"role": "system", "content": f"{no_think_prompt}{role_prompt}{rag_ans_prompt}"},
@@ -165,9 +170,11 @@ async def get_rag_query_text(input_text:str, guild_id:int, user_name:str):
                 },
             ]
     
-    output_text = await pool_ai_invoke(llm_pool, messages)
-
-    return output_text
+    output_text = await pool_ai_invoke(llm_pool, messages, json_format=True)
+    if metion_message:
+        return json.loads(output_text)
+    else:
+        return output_text
 
 
 
@@ -209,9 +216,30 @@ async def on_message(message):
     if message.channel.id in target_channels:
         guild_id:int = message.guild.id
         input_text = message.content
-        output_text = await get_rag_query_text(input_text, guild_id, message.author)
-        # output_text = input_text
-        await message.channel.send(output_text)
+        metion_message=True
+        if metion_message:
+            output = await get_rag_query_text(input_text, guild_id, message.author, metion_message=metion_message)
+            
+            output_text:str = output["output"]
+            rag_ids:list = output["mention_message"]
+            if rag_ids:
+                message_urls = []
+                for rag_id in rag_ids:
+                    msg = get_message_by_rag_id(rag_id)
+                    g_id, ch_id, id = rag_id.split('_')
+                    message_id = int(msg['message_id'])
+                    target_channel = client.get_channel(int(ch_id))
+                    message_to_forward = await target_channel.fetch_message(message_id)
+                    message_urls.append(message_to_forward.jump_url)
+
+            await message.channel.send(output_text)
+            for msg_url in message_urls:
+                await message.channel.send(msg_url)
+            
+        else:
+            output = await get_rag_query_text(input_text, guild_id, message.author, metion_message=metion_message)
+            await message.channel.send(output)
+            
 
 
 

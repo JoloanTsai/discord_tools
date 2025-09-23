@@ -21,6 +21,7 @@ from save_chat import get_tum_num
 from get_chat_history import get_date_messages, get_channel_ids
 from save_chat import get_server_info_json
 from ai_manager import embedding_pool, EmbeddingClient
+from type_hint import Message
 # from rag.config import custom_ef
 
 
@@ -64,7 +65,7 @@ class ChromaGeminiClient():
     
     async def query_rag_with_width(self, query_texts:str, n_results:int, msg_width=10, 
                              collection_name:str = DEFAULT_COLLECTION_NAME, 
-                             ignore_ch:set[int]|None=None) -> str:
+                             ignore_ch:set[int]|None=None, show_rag_id=False) -> str:
         collection = self._get_collection(collection_name)
         await self.emb_client.add_request(1)
 
@@ -73,7 +74,7 @@ class ChromaGeminiClient():
             n_results=n_results
         )
         
-        return self.get_width_message(results, msg_width, ignore_ch)
+        return self.get_width_message(results, msg_width, ignore_ch, show_rag_id)
     
     def delete_rag_data_by_ch_id(self, guild_id:int|str , channel_id:int|str):
         
@@ -88,7 +89,9 @@ class ChromaGeminiClient():
         collection.delete(ids=delete_ids)
 
     @staticmethod
-    def get_width_message(results:chromadb.QueryResult, msg_width=10, ignore_ch:set[int]|None=None) -> str:
+    def get_width_message(results:chromadb.QueryResult, msg_width=10, 
+                          ignore_ch:set[int]|None=None, show_rag_id = False
+                          ) -> str:
         docs = results['documents'][0]
         ids = results['ids'][0]
         obj = [get_range_message_by_msg_width(rag_id, msg_width=msg_width, ignore_ch=ignore_ch) for rag_id in ids]
@@ -105,7 +108,7 @@ class ChromaGeminiClient():
 
             contents = list(set(contents)) # 去除list中重複的元素
             ids, docs = zip(*contents)
-            output_text = reults_to_llm_input(ids, docs)
+            output_text = reults_to_llm_input(ids, docs, show_rag_id=show_rag_id)
 
             return output_text
 
@@ -124,7 +127,7 @@ class ChromaGeminiClient():
         return collection
 
 
-def get_range_message_by_msg_width(rag_id:str, msg_width:int = 10, ignore_ch:set[int]|None=None) -> list[dict]:
+def get_range_message_by_msg_width(rag_id:str, msg_width:int = 10, ignore_ch:set[int]|None=None) -> list[Message]:
     '''
     拿到指定 message，並回傳前後 msg_width 個的訊息 
     '''
@@ -141,15 +144,14 @@ def get_range_message_by_msg_width(rag_id:str, msg_width:int = 10, ignore_ch:set
 
         return obj
 
-def reults_to_llm_input(ids:list[str], docs:list[str]) -> str:
+def reults_to_llm_input(ids:list[str], docs:list[str], 
+                        show_ch_id=False, show_rag_id=False) -> str:
     '''
     ids : [gid_chid_id,]
     docs : [messages,]
     '''
-    try : 
-        with open(SERVER_INFO_FILE_PATH, 'r', encoding="utf-8") as f:
-            server_info_json = json.load(f)
-    except FileNotFoundError : server_info_json = None
+
+    server_info_json = get_server_info_json()
 
     bucket = defaultdict(list)
     for id, d in zip(ids, docs):
@@ -160,14 +162,16 @@ def reults_to_llm_input(ids:list[str], docs:list[str]) -> str:
         bucket[ch].sort(key=lambda x: x[2])          # 依 id 排序
 
     output_text = ''
-
     for ch in bucket:
         g_id = bucket[ch][0][0]
         ch_name = server_info_json[g_id]['channels'][ch]['channel_name']
 
-        output_text += f"\n\n頻道:{ch_name}  對話:[ \n"
-        for _, _, _, msg in bucket[ch]:
-            output_text += f"({msg})\n"
+        ch_id_str = f" channel_id : {ch} " if show_ch_id  else ""
+
+        output_text += f"\n\n頻道:{ch_name}{ch_id_str} 對話:[ \n"
+        for g_id, ch_id, id, msg in bucket[ch]:
+            rag_id_str = f" rag_id : {g_id}_{ch_id}_{str(id)}, " if show_rag_id  else ""
+            output_text += f"({rag_id_str}{msg})\n"
 
         output_text+=']'
     return output_text
@@ -210,7 +214,7 @@ def get_today_messages_outputs_guild(guild_id:str|int, max_outputs:int=100):
     if contents:
         contents = list(set(contents)) # 去除list中重複的元素
         ids, docs = zip(*contents)
-        output_text = reults_to_llm_input(ids, docs)
+        output_text = reults_to_llm_input(ids, docs, show_ch_id=True)
         
         return output_text
     else:
