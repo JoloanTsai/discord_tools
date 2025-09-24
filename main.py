@@ -64,8 +64,11 @@ async def pool_ai_invoke(pool, message, keep_think = None, think_mode=None, json
 with open(PROJECT_ROOT / 'prompts/summary.txt', 'r', encoding="utf-8") as f:
     summary_prompt = f.read()
 
-with open(PROJECT_ROOT / 'prompts/rag_ans_json.txt', 'r', encoding="utf-8") as f:
+with open(PROJECT_ROOT / 'prompts/rag_ans.txt', 'r', encoding="utf-8") as f:
     rag_ans_prompt = f.read()
+
+with open(PROJECT_ROOT / 'prompts/rag_ans_json.txt', 'r', encoding="utf-8") as f:
+    rag_ans_json_prompt = f.read()
 
 try:
     with open(PROJECT_ROOT / 'target_channels.txt', 'r', encoding="utf-8") as file:
@@ -161,19 +164,26 @@ async def get_rag_query_text(input_text:str, guild_id:int, user_name:str, metion
     
     query_output = await query_rag(embedding_pool, input_text, guild_id, show_rag_id=metion_message)
     web_search = 'None'
-
-    messages = [
-                {"role": "system", "content": f"{no_think_prompt}{role_prompt}{rag_ans_prompt}"},
-                {
-                    "role": "user",
-                    "content": f"query_output:{ {query_output} }.\n\n web_search:{ {web_search} }. \n\n，使用者({user_name})問的問題：{ {input_text} }.\n 現在時間：{iso_string}",
-                },
-            ]
     
-    output_text = await pool_ai_invoke(llm_pool, messages, json_format=query_rag_with_rag_id_response_format)
     if metion_message:
+        messages = [
+                    {"role": "system", "content": f"{no_think_prompt}{role_prompt}{rag_ans_json_prompt}"},
+                    {
+                        "role": "user",
+                        "content": f"query_output:{ {query_output} }.\n\n web_search:{ {web_search} }. \n\n，使用者({user_name})問的問題：{ {input_text} }.\n 現在時間：{iso_string}",
+                    },
+                ]
+        output_text = await pool_ai_invoke(llm_pool, messages, json_format=query_rag_with_rag_id_response_format)
         return json.loads(output_text)
     else:
+        messages = [
+            {"role": "system", "content": f"{no_think_prompt}{role_prompt}{rag_ans_prompt}"},
+            {
+                "role": "user",
+                "content": f"query_output:{ {query_output} }.\n\n web_search:{ {web_search} }. \n\n，使用者({user_name})問的問題：{ {input_text} }.\n 現在時間：{iso_string}",
+            },
+        ]
+        output_text = await pool_ai_invoke(llm_pool, messages)
         return output_text
 
 
