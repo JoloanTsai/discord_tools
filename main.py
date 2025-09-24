@@ -13,7 +13,7 @@ from rag.rag_new_message import rag_new_message, rag_new_message_by_guild
 from llm_response import ChromaGeminiClient
 from datetime import datetime, timezone, timedelta
 from get_chat_history import get_message_by_rag_id
-from type_hint import LlmOutputWithRagid
+from type_hint import LlmOutputWithRagid, query_rag_with_rag_id_response_format
 
 intents = discord.Intents.all()
 intents.guilds = True  # 啟用伺服器 Intent
@@ -43,13 +43,13 @@ class ModalInputer(discord.ui.Modal, title = "text inputer"):
         self.user_input = self.text_input.value
         await interaction.response.defer()
 
-async def pool_ai_invoke(pool, message, keep_think = None, think_mode=None, json_format=False) -> str:
+async def pool_ai_invoke(pool, message, keep_think = None, think_mode=None, json_format:bool|dict=False) -> str:
     try:
         machine = await pool.acquire()
         if not json_format:
             result = await machine.invoke(message, think_mode)
         else :
-            result = await machine.invoke_json_response(message)
+            result = await machine.invoke_json_response(message, response_format = json_format)
 
         # 像Qwen3 會將思考和輸出放在一起，只保留輸出移除思考內容
         if (not keep_think) and ("<think>" in result) and ("</think>" in result):
@@ -170,7 +170,7 @@ async def get_rag_query_text(input_text:str, guild_id:int, user_name:str, metion
                 },
             ]
     
-    output_text = await pool_ai_invoke(llm_pool, messages, json_format=True)
+    output_text = await pool_ai_invoke(llm_pool, messages, json_format=query_rag_with_rag_id_response_format)
     if metion_message:
         return json.loads(output_text)
     else:
@@ -218,12 +218,12 @@ async def on_message(message):
         input_text = message.content
         metion_message=True
         if metion_message:
+            message_urls = []
             output = await get_rag_query_text(input_text, guild_id, message.author, metion_message=metion_message)
-            
+            print(output)
             output_text:str = output["output"]
-            rag_ids:list = output["mention_message"]
+            rag_ids:list = output["mention_messages"]
             if rag_ids:
-                message_urls = []
                 for rag_id in rag_ids:
                     msg = get_message_by_rag_id(rag_id)
                     g_id, ch_id, id = rag_id.split('_')
@@ -236,9 +236,9 @@ async def on_message(message):
             for msg_url in message_urls:
                 await message.channel.send(msg_url)
             
-        else:
-            output = await get_rag_query_text(input_text, guild_id, message.author, metion_message=metion_message)
-            await message.channel.send(output)
+        else:pass
+            # output = await get_rag_query_text(input_text, guild_id, message.author, metion_message=metion_message)
+            # await message.channel.send(output)
             
 
 

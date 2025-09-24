@@ -35,14 +35,14 @@ class LlmClient():
         )
         return response.choices[0].message.content
     
-    async def invoke_json_response(self, messages:list[dict]):
+    async def invoke_json_response(self, messages:list[dict], response_format={"type": "json_object"}):
         await self.add_request()
         response =await self.client.chat.completions.create(
             messages=messages,
             model=self.model,
             stream=self.stream,
             temperature=self.temperature,
-            response_format={"type": "json_object"},
+            response_format=response_format,
         )
         return response.choices[0].message.content
     
